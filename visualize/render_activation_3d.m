@@ -13,14 +13,14 @@ if ~exist(brainTemplateFile, 'file')
     error('[render_activation_3d] 脑模板不存在: %s', brainTemplateFile);
 end
 
-[tData, ~] = nifti_read(tMapFile);
-[brainData, ~] = nifti_read(brainTemplateFile);
-tMap = double(tData(:,:,:,1));
-brain = double(brainData(:,:,:,1));
+[tData, tHdr]     = nifti_read(tMapFile);
+[brainData, brainHdr] = nifti_read(brainTemplateFile);
+tMap   = double(tData(:,:,:,1));
+brain  = double(brainData(:,:,:,1));
 
-% 尺寸对齐（若尺寸不同，将统计图重采样到模板空间）
+% 若尺寸不同，使用仿射矩阵对齐重采样，将统计图重采样到脑模板空间
 if any(size(tMap) ~= size(brain))
-    tMap = resample_to_size(tMap, size(brain));
+    tMap = resample_vol_affine(tMap, tHdr.affine, brainHdr.affine, size(brain));
 end
 
 tThr = visCfg.tThreshold;
@@ -78,12 +78,14 @@ if isfield(visCfg, 'outputPng') && visCfg.outputPng
 end
 end
 
-function V2 = resample_to_size(V, targetSize)
-[nx, ny, nz] = size(V);
-tx = targetSize(1); ty = targetSize(2); tz = targetSize(3);
+function V_tgt = resample_vol_affine(V_src, src_affine, tgt_affine, tgt_dims)
+% resample_vol_affine - 使用仿射矩阵将源体数据重采样到目标坐标空间
+tx = tgt_dims(1); ty = tgt_dims(2); tz = tgt_dims(3);
 [Xt, Yt, Zt] = ndgrid(1:tx, 1:ty, 1:tz);
-Xs = (Xt - 1) * (nx - 1) / max(tx - 1, 1) + 1;
-Ys = (Yt - 1) * (ny - 1) / max(ty - 1, 1) + 1;
-Zs = (Zt - 1) * (nz - 1) / max(tz - 1, 1) + 1;
-V2 = reshape(trilinear_interp(V, [Xs(:)'; Ys(:)'; Zs(:)']), tx, ty, tz);
+nTgt = tx * ty * tz;
+tgt_vox_0 = [Xt(:)'-1; Yt(:)'-1; Zt(:)'-1; ones(1, nTgt)];
+tgt_world  = tgt_affine * tgt_vox_0;
+src_vox_1  = (src_affine \ tgt_world);
+src_vox_1  = src_vox_1(1:3,:) + 1;
+V_tgt = reshape(trilinear_interp(V_src, src_vox_1), tx, ty, tz);
 end

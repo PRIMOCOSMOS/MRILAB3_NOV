@@ -31,10 +31,11 @@ fprintf('[normalize_apply] 读取功能像: %s\n', inFile);
 [nx_in, ny_in, nz_in, nt] = size(data);
 
 fprintf('[normalize_apply] 读取位移场: %s\n', flowFile);
-[flowData, ~] = nifti_read(flowFile);
-% flowData: [nx ny nz 3]，单位为个体空间体素位移
+[flowData, flowHdr] = nifti_read(flowFile);
+% flowData: [tnx tny tnz 3]，定义在模板坐标空间，各分量为模板体素位移
+% flowHdr.affine 即模板的仿射矩阵（由 dartel_warp 写入）
 
-% 位移场尺寸应与输入图像匹配
+% 位移场尺寸（模板空间）
 [nx_f, ny_f, nz_f, nd] = size(flowData);
 if nd ~= 3
     error('[normalize_apply] 位移场第4维应为3（x/y/z方向）');
@@ -52,49 +53,47 @@ mni_affine = [mni_vox(1) 0 0 -mni_vox(1)*(mni_origin(1)-1);
               0 0 mni_vox(3) -mni_vox(3)*(mni_origin(3)-1);
               0 0 0           1                             ];
 
-% 输入图像仿射（个体空间世界坐标 → 体素坐标）
+% 输入图像仿射（个体空间世界坐标 → 体素坐标，用于最终采样步骤）
 src_affine_inv = inv(hdr.affine);
+
+% 从位移场头信息读取模板仿射矩阵
+% dartel_warp 已将模板仿射写入位移场头，确保坐标系一致
+tmpl_affine     = flowHdr.affine;
+tmpl_affine_inv = inv(tmpl_affine);
 
 % -------- 构建 MNI 网格 --------
 [Xm, Ym, Zm] = ndgrid(1:mx, 1:my, 1:mz);
-mni_coords = [Xm(:)'; Ym(:)'; Zm(:)'];  % [3 × nMNI]
+nMNI = mx * my * mz;
 
-% MNI 体素 → 世界坐标
-mni0 = [mni_coords - 1; ones(1, mx*my*mz)];
-mni_world = mni_affine * mni0;  % [4 × nMNI]
+% MNI 体素（1-based）→ MNI 世界坐标（0-based 体素索引送入仿射）
+mni_vox_0 = [Xm(:)'-1; Ym(:)'-1; Zm(:)'-1; ones(1, nMNI)];
+mni_world  = mni_affine * mni_vox_0;  % [4 × nMNI]
 
-% 世界坐标 → 输入图像体素坐标（近似：忽略形变，先找个体空间中的体素）
-src_vox = src_affine_inv * mni_world;  % [4 × nMNI]
-src_vox = src_vox(1:3,:) + 1;  % 0-based → 1-based
+% -------- 坐标映射链：MNI → 模板 → 个体 --------
+% 步骤1：MNI 世界坐标 → 模板体素坐标（1-based）
+%   DARTEL 模板在 MNI 空间对齐，故世界坐标可直接经模板仿射逆变换得到模板体素坐标
+tmpl_vox_0 = tmpl_affine_inv * mni_world;  % [4 × nMNI]，0-based
+tmpl_vox_1 = tmpl_vox_0(1:3,:) + 1;        % 0-based → 1-based
 
-% -------- 应用形变场（从 MNI 到个体空间的逆变形）--------
-% 注意：flowData 存储的是 "个体 → MNI" 的位移，
-%       需要通过迭代求逆（简化：直接取负值近似逆变形）
-% 实际精确实现应使用 Powell's method 或固定点迭代求逆
-% 此处采用简化的近似逆：将位移场在 MNI 网格中插值并取反
-if nx_f == nx_in && ny_f == ny_in && nz_f == nz_in
-    % 位移场与输入图像同尺寸：直接使用
-    dx_mni = reshape(trilinear_interp(flowData(:,:,:,1), src_vox), mx, my, mz);
-    dy_mni = reshape(trilinear_interp(flowData(:,:,:,2), src_vox), mx, my, mz);
-    dz_mni = reshape(trilinear_interp(flowData(:,:,:,3), src_vox), mx, my, mz);
-else
-    % 尺寸不匹配：对位移场进行三线性重采样到与输入图像匹配的网格，再插值到 MNI 网格
-    % 构建位移场体素坐标（目标：在 src_vox 处采样位移场）
-    % 位移场尺寸为 [nx_f ny_f nz_f 3]，需将 src_vox 坐标缩放到位移场坐标系
-    scale_x = nx_f / nx_in;  scale_y = ny_f / ny_in;  scale_z = nz_f / nz_in;
-    src_vox_f = [src_vox(1,:) * scale_x; src_vox(2,:) * scale_y; src_vox(3,:) * scale_z];
-    dx_mni = reshape(trilinear_interp(flowData(:,:,:,1), src_vox_f), mx, my, mz);
-    dy_mni = reshape(trilinear_interp(flowData(:,:,:,2), src_vox_f), mx, my, mz);
-    dz_mni = reshape(trilinear_interp(flowData(:,:,:,3), src_vox_f), mx, my, mz);
-    fprintf('[normalize_apply] 位移场已重采样（%d×%d×%d → %d×%d×%d）\n', ...
-        nx_f, ny_f, nz_f, nx_in, ny_in, nz_in);
-end
+% 步骤2：在模板体素坐标处采样位移场 D
+%   D(t) 含义：对模板位置 t，应在模板空间中的 t+D(t) 处采样个体图像
+%   即 gm_in_tmpl(t + D(t)) ≈ template_gm(t)（DARTEL 优化目标）
+dx = reshape(trilinear_interp(flowData(:,:,:,1), tmpl_vox_1), mx, my, mz);
+dy = reshape(trilinear_interp(flowData(:,:,:,2), tmpl_vox_1), mx, my, mz);
+dz = reshape(trilinear_interp(flowData(:,:,:,3), tmpl_vox_1), mx, my, mz);
 
-% 最终采样坐标（个体空间体素坐标）
-X_src = reshape(src_vox(1,:), mx, my, mz) - dx_mni;
-Y_src = reshape(src_vox(2,:), mx, my, mz) - dy_mni;
-Z_src = reshape(src_vox(3,:), mx, my, mz) - dz_mni;
-sampCoords = [X_src(:)'; Y_src(:)'; Z_src(:)'];
+% 步骤3：位移后的模板体素坐标（在 gm_in_tmpl 中实际采样位置）
+Xt_disp = reshape(tmpl_vox_1(1,:), mx, my, mz) + dx;  % 1-based
+Yt_disp = reshape(tmpl_vox_1(2,:), mx, my, mz) + dy;
+Zt_disp = reshape(tmpl_vox_1(3,:), mx, my, mz) + dz;
+
+% 步骤4：模板体素坐标（0-based）→ 世界坐标 → 个体功能像体素坐标（1-based）
+%   gm_in_tmpl 是个体 GM 经仿射 individual_affine→template_affine 重采样的结果，
+%   所以将模板体素坐标经模板仿射转回世界坐标，再经个体仿射逆变换可得个体体素坐标
+tgt_tmpl_0 = [(Xt_disp(:)-1)'; (Yt_disp(:)-1)'; (Zt_disp(:)-1)'; ones(1, nMNI)];
+tgt_world   = tmpl_affine * tgt_tmpl_0;   % 世界坐标
+tgt_src_0   = src_affine_inv * tgt_world; % 个体体素坐标（0-based）
+sampCoords  = tgt_src_0(1:3,:) + 1;       % 0-based → 1-based，送入 trilinear_interp
 
 % -------- 逐时间点插值 --------
 fprintf('[normalize_apply] 开始对 %d 个时间点进行空间标准化...\n', nt);

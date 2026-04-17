@@ -66,11 +66,12 @@ if isfield(cfg, 'templates') && isfield(cfg.templates, 'standard') && ...
    exist(cfg.templates.standard.brainMaskNii, 'file')
     try
         stdMaskThreshold = 0.5;
-        [maskData, ~] = nifti_read(cfg.templates.standard.brainMaskNii);
+        [maskData, maskHdr] = nifti_read(cfg.templates.standard.brainMaskNii);
         maskVol = double(maskData(:,:,:,1));
         if any(size(maskVol) ~= [nx ny nz])
-            maskVol = resample_to_size(maskVol, [nx ny nz]);
-            fprintf('[run_firstlevel_glm] 标准脑掩模尺寸已重采样到 [%d %d %d]\n', nx, ny, nz);
+            % 使用仿射矩阵对齐重采样，确保脑掩模与功能像在同一坐标系
+            maskVol = resample_vol_affine(maskVol, maskHdr.affine, hdr.affine, [nx ny nz]);
+            fprintf('[run_firstlevel_glm] 标准脑掩模已仿射重采样到 [%d %d %d]\n', nx, ny, nz);
         end
         stdMask = maskVol >= stdMaskThreshold;
         if any(stdMask(:))
@@ -165,16 +166,14 @@ fprintf('[run_firstlevel_glm] === 一阶 GLM 分析完成 ===\n');
 fprintf('[run_firstlevel_glm] 输出目录: %s\n', outDir);
 end
 
-function V2 = resample_to_size(V, targetSize)
-[nx0, ny0, nz0] = size(V);
-tx = targetSize(1); ty = targetSize(2); tz = targetSize(3);
-if nx0 == tx && ny0 == ty && nz0 == tz
-    V2 = V;
-    return;
-end
+function V_tgt = resample_vol_affine(V_src, src_affine, tgt_affine, tgt_dims)
+% resample_vol_affine - 使用仿射矩阵将源体数据重采样到目标坐标空间
+tx = tgt_dims(1); ty = tgt_dims(2); tz = tgt_dims(3);
 [Xt, Yt, Zt] = ndgrid(1:tx, 1:ty, 1:tz);
-Xs = (Xt - 1) * (nx0 - 1) / max(tx - 1, 1) + 1;
-Ys = (Yt - 1) * (ny0 - 1) / max(ty - 1, 1) + 1;
-Zs = (Zt - 1) * (nz0 - 1) / max(tz - 1, 1) + 1;
-V2 = reshape(trilinear_interp(V, [Xs(:)'; Ys(:)'; Zs(:)']), tx, ty, tz);
+nTgt = tx * ty * tz;
+tgt_vox_0 = [Xt(:)'-1; Yt(:)'-1; Zt(:)'-1; ones(1, nTgt)];
+tgt_world  = tgt_affine * tgt_vox_0;
+src_vox_1  = (src_affine \ tgt_world);
+src_vox_1  = src_vox_1(1:3,:) + 1;
+V_tgt = reshape(trilinear_interp(V_src, src_vox_1), tx, ty, tz);
 end
