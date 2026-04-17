@@ -76,11 +76,16 @@ if nx_f == nx_in && ny_f == ny_in && nz_f == nz_in
     dy_mni = reshape(trilinear_interp(flowData(:,:,:,2), src_vox), mx, my, mz);
     dz_mni = reshape(trilinear_interp(flowData(:,:,:,3), src_vox), mx, my, mz);
 else
-    % 尺寸不匹配：位移场插值到源空间
-    dx_mni = zeros(mx, my, mz);
-    dy_mni = zeros(mx, my, mz);
-    dz_mni = zeros(mx, my, mz);
-    fprintf('[normalize_apply] 警告：位移场尺寸不匹配，跳过形变（使用线性映射）\n');
+    % 尺寸不匹配：对位移场进行三线性重采样到与输入图像匹配的网格，再插值到 MNI 网格
+    % 构建位移场体素坐标（目标：在 src_vox 处采样位移场）
+    % 位移场尺寸为 [nx_f ny_f nz_f 3]，需将 src_vox 坐标缩放到位移场坐标系
+    scale_x = nx_f / nx_in;  scale_y = ny_f / ny_in;  scale_z = nz_f / nz_in;
+    src_vox_f = [src_vox(1,:) * scale_x; src_vox(2,:) * scale_y; src_vox(3,:) * scale_z];
+    dx_mni = reshape(trilinear_interp(flowData(:,:,:,1), src_vox_f), mx, my, mz);
+    dy_mni = reshape(trilinear_interp(flowData(:,:,:,2), src_vox_f), mx, my, mz);
+    dz_mni = reshape(trilinear_interp(flowData(:,:,:,3), src_vox_f), mx, my, mz);
+    fprintf('[normalize_apply] 位移场已重采样（%d×%d×%d → %d×%d×%d）\n', ...
+        nx_f, ny_f, nz_f, nx_in, ny_in, nz_in);
 end
 
 % 最终采样坐标（个体空间体素坐标）

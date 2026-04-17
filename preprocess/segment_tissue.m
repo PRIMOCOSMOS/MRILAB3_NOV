@@ -124,7 +124,13 @@ hdr_seg.dim = int16([3, nx, ny, nz, 1, 1, 1, 1]);
 hdr_seg.scl_slope = 1;
 hdr_seg.scl_inter = 0;
 
-labels = {'csf', 'gm', 'wm'};  % 按强度升序：CSF < GM < WM
+% 文件命名规则（与 run_pipeline_sub01.m 中的调用约定一致）:
+%   k=1 → CSF（最低强度），c1_t1.nii
+%   k=2 → GM（中等强度），c2_t1.nii
+%   k=3 → WM（最高强度），c3_t1.nii
+% 注意: SPM 的 c1=GM,c2=WM,c3=CSF 与此不同；
+%       本 pipeline 采用 c1=CSF,c2=GM,c3=WM 的强度升序约定
+labels = {'csf', 'gm', 'wm'};  % 强度升序：CSF < GM < WM，对应 k=1,2,3
 outFiles = cell(1,3);
 for k = 1:nClasses
     hdr_seg.descrip = sprintf('SegProb_%s mu=%.1f', labels{k}, mu(k));

@@ -186,7 +186,9 @@ phi2 = phi2_out;
 end
 
 function Vw = warp_volume(V, disp)
-% 用位移场 disp 形变体数据 V
+% 用位移场 disp 对体数据 V 进行前向形变采样（pull interpolation）
+% 对每个输出体素，其采样位置 = 当前网格坐标 + 位移
+% 这等价于 "将输出网格中的点拉取（pull）到输入图像中的对应位置"
 [nx, ny, nz] = size(V);
 [Xg, Yg, Zg] = ndgrid(1:nx, 1:ny, 1:nz);
 Xd = Xg + disp(:,:,:,1);

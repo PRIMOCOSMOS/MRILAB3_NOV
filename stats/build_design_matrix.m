@@ -135,10 +135,16 @@ if nBases < 1
     return;
 end
 
-% DCT-II 基函数
+% DCT-II 基函数（标准正交化）
+% k=0 使用 sqrt(1/nScans)，k>0 使用 sqrt(2/nScans)
 n_col = nBases;
 X_dct = zeros(nScans, n_col);
 for k = 1:n_col
-    X_dct(:,k) = cos(pi * (0:nScans-1)' * k / nScans) * sqrt(2/nScans);
+    if k == 1
+        norm_factor = sqrt(1/nScans);
+    else
+        norm_factor = sqrt(2/nScans);
+    end
+    X_dct(:,k) = cos(pi * (0:nScans-1)' * (k-1) / nScans) * norm_factor;
 end
 end

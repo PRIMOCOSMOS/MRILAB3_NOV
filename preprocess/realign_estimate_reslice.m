@@ -94,9 +94,10 @@ for pass = 1:(1+rtm)  % 若rtm=1则跑两遍
         for iter = 1:maxIter
             M   = rigid_mat(p);  % 当前参数的变换矩阵
 
-            % 将参考网格坐标变换到当前图像空间
-            coordsRef = [Xs(:)'-1, Ys(:)'-1, Zs(:)'-1, ones(1,nPts)];  % 0-based
-            coordsCur = M \ [coordsRef(:,1)+1; coordsRef(:,2)+1; coordsRef(:,3)+1; ones(1,nPts)];
+            % 将参考网格坐标（1-based 体素）变换到当前图像坐标（1-based 体素）
+            % 构建 [4×nPts] 齐次坐标矩阵（1-based 体素坐标）
+            coordsRef_h = [Xs(:)'; Ys(:)'; Zs(:)'; ones(1,nPts)];  % [4×nPts]，1-based
+            coordsCur   = M \ coordsRef_h;  % [4×nPts]，1-based（M 在体素空间近似有效）
 
             % 在当前图像中插值
             Ival = trilinear_interp(curVol,  coordsCur(1:3,:));  % I(cur)
