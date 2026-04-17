@@ -17,14 +17,32 @@ end
 if ~isfield(cfg.templates.standard, 'brainMaskNii') || ~isfield(cfg.templates.standard, 't1TemplateNii')
     error('[validate_pipeline_config] 缺少标准模板配置: brainMaskNii / t1TemplateNii');
 end
-requiredStandardTemplateFiles = {
-    cfg.templates.standard.brainMaskNii, ...
-    cfg.templates.standard.t1TemplateNii
-};
-for i = 1:numel(requiredStandardTemplateFiles)
-    if ~exist(requiredStandardTemplateFiles{i}, 'file')
-        error('[validate_pipeline_config] 模板文件不存在, 请在配置文件中填写正确绝对路径: %s', requiredStandardTemplateFiles{i});
+
+% 脑掩模：支持 .hdr（Analyze 7.5 对文件），也支持 .nii 单文件
+brainMaskPath = cfg.templates.standard.brainMaskNii;
+[~, ~, brainMaskExt] = fileparts(brainMaskPath);
+if strcmpi(brainMaskExt, '.hdr')
+    % Analyze 7.5 格式：检查 .hdr 和配套 .img 文件
+    if ~exist(brainMaskPath, 'file')
+        error('[validate_pipeline_config] 脑掩模 .hdr 不存在: %s\n请在 config 中填写正确绝对路径（来自 DPABI/Templates/）', brainMaskPath);
     end
+    [fdir2, fbase2, ~] = fileparts(brainMaskPath);
+    imgFile = fullfile(fdir2, [fbase2 '.img']);
+    if ~exist(imgFile, 'file')
+        error('[validate_pipeline_config] 脑掩模 .img 不存在: %s\nAnalyze 7.5 格式需要 .hdr 与 .img 同目录配套', imgFile);
+    end
+elseif strcmpi(brainMaskExt, '.nii')
+    if ~exist(brainMaskPath, 'file')
+        error('[validate_pipeline_config] 脑掩模 .nii 不存在: %s', brainMaskPath);
+    end
+else
+    error('[validate_pipeline_config] 脑掩模格式不支持（需 .hdr 或 .nii）: %s', brainMaskPath);
+end
+
+% T1 可视化模板（NIfTI 格式，来自 DPABI/Templates/ch2.nii）
+if ~exist(cfg.templates.standard.t1TemplateNii, 'file')
+    error('[validate_pipeline_config] T1 可视化模板不存在: %s\n正确文件名为 ch2.nii（非 ch2bet.nii），来自 DPABI/Templates/', ...
+        cfg.templates.standard.t1TemplateNii);
 end
 
 if ~isfield(cfg.templates, 'dartel')
@@ -38,7 +56,9 @@ has4DDartel = isfield(cfg.templates.dartel, 'template4DNii') && ...
               ~isempty(cfg.templates.dartel.template4DNii);
 if ~hasDualFileDartel && ~has4DDartel
     error(['[validate_pipeline_config] DARTEL 模板配置缺失: ', ...
-           '请提供 (gmTemplateNii + wmTemplateNii) 或 (template4DNii + gmVolumeIndex + wmVolumeIndex)']);
+           '请提供 (gmTemplateNii + wmTemplateNii) 或 (template4DNii + gmVolumeIndex + wmVolumeIndex)\n', ...
+           '推荐使用 SPM 自带模板: <spm_dir>/toolbox/DARTEL/Template_6_IXI555_MNI152.nii\n', ...
+           '注意：DPABI 中没有 Template_6_EastAsian.nii 文件，该文件名不存在于 DPABI 安装包中']);
 end
 if hasDualFileDartel
     if ~exist(cfg.templates.dartel.gmTemplateNii, 'file') || ~exist(cfg.templates.dartel.wmTemplateNii, 'file')
@@ -48,7 +68,10 @@ if hasDualFileDartel
 end
 if has4DDartel
     if ~exist(cfg.templates.dartel.template4DNii, 'file')
-        error('[validate_pipeline_config] DARTEL 4D模板不存在: %s', cfg.templates.dartel.template4DNii);
+        error(['[validate_pipeline_config] DARTEL 4D 模板不存在: %s\n', ...
+               '该模板应为 SPM DARTEL 工具箱的 Template_6_IXI555_MNI152.nii\n', ...
+               '（位于 <spm_dir>/toolbox/DARTEL/），而非 DPABI 安装目录中的文件'], ...
+               cfg.templates.dartel.template4DNii);
     end
     if ~isfield(cfg.templates.dartel, 'gmVolumeIndex') || ~isfield(cfg.templates.dartel, 'wmVolumeIndex')
         error('[validate_pipeline_config] 使用 template4DNii 时必须配置 gmVolumeIndex / wmVolumeIndex');

@@ -44,17 +44,34 @@ cfg.outDirs = { ...
 % 说明:
 % 1) 以下模板不随代码仓库分发，需使用者本地准备并填写绝对路径
 % 2) 所有模板会在 run_pipeline_sub01 启动时做 fail-fast 校验
-% 3) 默认命名参考 DPABI 常见模板，但实现不依赖这些工具箱
-% DARTEL 模板支持两种配置方式:
-%   A) 4D模板（推荐，DPABI默认）:
-%      template4DNii + gmVolumeIndex + wmVolumeIndex
-%   B) 双文件模板（兼容）:
-%      gmTemplateNii + wmTemplateNii
-cfg.templates.dartel.template4DNii = 'D:\DPABI_V9.0_250415\Templates\Template_6_EastAsian.nii';
-cfg.templates.dartel.gmVolumeIndex = 1;   % 4D模板中 GM 所在帧
-cfg.templates.dartel.wmVolumeIndex = 2;   % 4D模板中 WM 所在帧
-cfg.templates.standard.brainMaskNii = 'D:\DPABI_V9.0_250415\Templates\BrainMask_05_91x109x91.nii';
-cfg.templates.standard.t1TemplateNii = 'D:\DPABI_V9.0_250415\Templates\ch2bet.nii';
+% 3) 模板文件均来自 DPABI 或 SPM 安装目录，见下方说明
+%
+% ── DARTEL 模板 ──────────────────────────────────────────────────────
+%   本 pipeline 为单被试模式，无法自建群组级 DARTEL 模板（DPABI 中
+%   "DARTEL: Create Template" 需多被试联合）。
+%   推荐使用 SPM DARTEL 工具箱自带的 IXI555 MNI152 人群模板，即：
+%     <spm安装目录>/toolbox/DARTEL/Template_6_IXI555_MNI152.nii
+%   该文件是 SPM12 DARTEL 工具箱的标准配置文件。
+%   若需使用东亚人模板（提高中国受试者的分割精度），可替换为
+%   由多名被试自建的 Template_6.nii，路径同样配置于此处。
+%   DARTEL 模板支持两种配置方式:
+%     A) 4D 单文件（推荐）: template4DNii + gmVolumeIndex + wmVolumeIndex
+%        第1帧=GM，第2帧=WM（与 DARTEL 惯例一致）
+%     B) 双文件: gmTemplateNii + wmTemplateNii
+cfg.templates.dartel.template4DNii = 'D:\spm12\toolbox\DARTEL\Template_6_IXI555_MNI152.nii';
+cfg.templates.dartel.gmVolumeIndex = 1;   % 4D模板中 GM 所在帧（通常为第1帧）
+cfg.templates.dartel.wmVolumeIndex = 2;   % 4D模板中 WM 所在帧（通常为第2帧）
+%
+% ── 标准脑掩模（Analyze 7.5 格式）──────────────────────────────────
+%   来自 DPABI/Templates/ 目录，仅有 .hdr/.img 格式（无 .nii）
+%   pipeline 的 nifti_read 已支持 Analyze 7.5 格式读取。
+%   仿射矩阵自动从 .mat sidecar（如存在）或头中的 originator 字段解析。
+cfg.templates.standard.brainMaskNii = 'D:\DPABI_V9.0_250415\Templates\BrainMask_05_91x109x91.hdr';
+%
+% ── T1 可视化模板 ───────────────────────────────────────────────────
+%   来自 DPABI/Templates/ch2.nii（Colin Holmes T1 MNI 标准脑，非 ch2bet）
+%   DPARSFA_run.m 第 3255 行: Ch2Filename = fullfile(TemplatePath,'ch2.nii')
+cfg.templates.standard.t1TemplateNii = 'D:\DPABI_V9.0_250415\Templates\ch2.nii';
 
 % Renderer（交互式3D显示）所需模板
 cfg.visualization.enable = true;                     % 是否在1st-level后自动出3D交互图
