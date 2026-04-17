@@ -145,7 +145,7 @@ if isfield(cfgIn, 'boundingBox')
     dims = round((bboxMax - bboxMin) ./ vox) + 1;
     % 将 mm 坐标的 bbox 最小角转换为 1-based 体素原点：
     % 令体素坐标 i=1 时对应 bboxMin，可得
-    % bboxMin_i = voxelSize_i * (1 - origin_i)  =>  origin_i = 1 - bboxMin_i/voxelSize_i
+    % bboxMin_i = vox_i * (1 - origin_i)  =>  origin_i = 1 - bboxMin_i/vox_i
     origin = 1 - bboxMin ./ vox;
 else
     if ~isfield(cfgIn, 'dims') || ~isfield(cfgIn, 'voxSize') || ~isfield(cfgIn, 'origin')
