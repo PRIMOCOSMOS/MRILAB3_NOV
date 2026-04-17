@@ -44,11 +44,17 @@ cfg.outDirs = { ...
 % 说明:
 % 1) 以下模板不随代码仓库分发，需使用者本地准备并填写绝对路径
 % 2) 所有模板会在 run_pipeline_sub01 启动时做 fail-fast 校验
-% 3) 默认命名参考 SPM/DPABI 常见模板，但实现不依赖这些工具箱
-cfg.templates.dartel.gmTemplateNii = 'D:\MRI_PRO\MRILAB3\Templates\EastAsian\Template_GM.nii';
-cfg.templates.dartel.wmTemplateNii = 'D:\MRI_PRO\MRILAB3\Templates\EastAsian\Template_WM.nii';
-cfg.templates.standard.brainMaskNii = 'D:\MRI_PRO\MRILAB3\Templates\MNI\BrainMask_2mm.nii';
-cfg.templates.standard.t1TemplateNii = 'D:\MRI_PRO\MRILAB3\Templates\MNI\MNI152_T1_2mm.nii';
+% 3) 默认命名参考 DPABI 常见模板，但实现不依赖这些工具箱
+% DARTEL 模板支持两种配置方式:
+%   A) 4D模板（推荐，DPABI默认）:
+%      template4DNii + gmVolumeIndex + wmVolumeIndex
+%   B) 双文件模板（兼容）:
+%      gmTemplateNii + wmTemplateNii
+cfg.templates.dartel.template4DNii = 'D:\DPABI_V9.0_250415\Templates\Template_6_EastAsian.nii';
+cfg.templates.dartel.gmVolumeIndex = 1;   % 4D模板中 GM 所在帧
+cfg.templates.dartel.wmVolumeIndex = 2;   % 4D模板中 WM 所在帧
+cfg.templates.standard.brainMaskNii = 'D:\DPABI_V9.0_250415\Templates\BrainMask_05_91x109x91.nii';
+cfg.templates.standard.t1TemplateNii = 'D:\DPABI_V9.0_250415\Templates\ch2bet.nii';
 
 % Renderer（交互式3D显示）所需模板
 cfg.visualization.enable = true;                     % 是否在1st-level后自动出3D交互图
@@ -110,7 +116,7 @@ cfg.dartel.svfIntegrationSteps = 6; % scaling&squaring 步数
 %   Bounding box: [xmin ymin zmin; xmax ymax zmax]（单位 mm）
 %   Voxel size:   [vx vy vz]（单位 mm）
 cfg.normalize.boundingBox = [-90 -126 -72; 90 90 108];
-cfg.normalize.voxSize     = [3 3 3];
+cfg.normalize.voxSize     = [2 2 2];
 
 % 兼容 normalize_apply 的网格参数（由 bbox 与 voxel size 自动推导）
 bboxMin = cfg.normalize.boundingBox(1,:);

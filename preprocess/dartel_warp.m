@@ -44,18 +44,7 @@ nIter   = cfg.dartel.nIter;
 reg     = cfg.dartel.reg;
 
 % -------- 加载真实模板（东亚模板或用户提供模板）--------
-if ~isfield(cfg, 'templates') || ~isfield(cfg.templates, 'dartel')
-    error('[dartel_warp] 缺少 cfg.templates.dartel 配置');
-end
-gmTemplateFile = cfg.templates.dartel.gmTemplateNii;
-wmTemplateFile = cfg.templates.dartel.wmTemplateNii;
-if ~exist(gmTemplateFile, 'file') || ~exist(wmTemplateFile, 'file')
-    error('[dartel_warp] 模板文件不存在，请检查配置: GM=%s WM=%s', gmTemplateFile, wmTemplateFile);
-end
-[template_gm_raw, ~] = nifti_read(gmTemplateFile);
-[template_wm_raw, ~] = nifti_read(wmTemplateFile);
-template_gm = resample_vol_to_size(double(template_gm_raw(:,:,:,1)), [nx ny nz]);
-template_wm = resample_vol_to_size(double(template_wm_raw(:,:,:,1)), [nx ny nz]);
+[template_gm, template_wm] = load_dartel_templates(cfg, [nx ny nz]);
 
 % -------- 初始化速度场 --------
 % 速度场 v: [nx ny nz 3]，单位为体素位移
@@ -260,4 +249,61 @@ Xs = (Xt - 1) * (nx - 1) / max(tx - 1, 1) + 1;
 Ys = (Yt - 1) * (ny - 1) / max(ty - 1, 1) + 1;
 Zs = (Zt - 1) * (nz - 1) / max(tz - 1, 1) + 1;
 V2 = reshape(trilinear_interp(V, [Xs(:)'; Ys(:)'; Zs(:)']), tx, ty, tz);
+end
+
+function [template_gm, template_wm] = load_dartel_templates(cfg, targetSize)
+if ~isfield(cfg, 'templates') || ~isfield(cfg.templates, 'dartel')
+    error('[dartel_warp] 缺少 cfg.templates.dartel 配置');
+end
+
+has4DTemplate = isfield(cfg.templates.dartel, 'template4DNii') && ...
+                ~isempty(cfg.templates.dartel.template4DNii);
+hasDualFiles = isfield(cfg.templates.dartel, 'gmTemplateNii') && ...
+               isfield(cfg.templates.dartel, 'wmTemplateNii') && ...
+               ~isempty(cfg.templates.dartel.gmTemplateNii) && ...
+               ~isempty(cfg.templates.dartel.wmTemplateNii);
+
+if has4DTemplate
+    template4DFile = cfg.templates.dartel.template4DNii;
+    if ~exist(template4DFile, 'file')
+        error('[dartel_warp] DARTEL 4D模板不存在: %s', template4DFile);
+    end
+    if ~isfield(cfg.templates.dartel, 'gmVolumeIndex') || ~isfield(cfg.templates.dartel, 'wmVolumeIndex')
+        error('[dartel_warp] 4D模板模式下必须提供 gmVolumeIndex / wmVolumeIndex');
+    end
+    gmIdx = cfg.templates.dartel.gmVolumeIndex;
+    wmIdx = cfg.templates.dartel.wmVolumeIndex;
+    if any([gmIdx, wmIdx] < 1) || any(floor([gmIdx, wmIdx]) ~= [gmIdx, wmIdx])
+        error('[dartel_warp] gmVolumeIndex / wmVolumeIndex 必须为正整数');
+    end
+
+    [template4D, ~] = nifti_read(template4DFile);
+    if ndims(template4D) < 4
+        error('[dartel_warp] 4D模板文件不包含第4维: %s', template4DFile);
+    end
+    nVols = size(template4D, 4);
+    if gmIdx > nVols || wmIdx > nVols
+        error('[dartel_warp] 4D模板帧数不足: 需要 GM=%d WM=%d, 实际=%d', gmIdx, wmIdx, nVols);
+    end
+
+    fprintf('[dartel_warp] 使用4D模板: %s (GM=%d, WM=%d)\n', template4DFile, gmIdx, wmIdx);
+    template_gm = resample_vol_to_size(double(template4D(:,:,:,gmIdx)), targetSize);
+    template_wm = resample_vol_to_size(double(template4D(:,:,:,wmIdx)), targetSize);
+    return;
+end
+
+if ~hasDualFiles
+    error('[dartel_warp] 未提供有效DARTEL模板：请配置4D模板或GM/WM双文件模板');
+end
+
+gmTemplateFile = cfg.templates.dartel.gmTemplateNii;
+wmTemplateFile = cfg.templates.dartel.wmTemplateNii;
+if ~exist(gmTemplateFile, 'file') || ~exist(wmTemplateFile, 'file')
+    error('[dartel_warp] 模板文件不存在，请检查配置: GM=%s WM=%s', gmTemplateFile, wmTemplateFile);
+end
+fprintf('[dartel_warp] 使用双文件模板: GM=%s, WM=%s\n', gmTemplateFile, wmTemplateFile);
+[template_gm_raw, ~] = nifti_read(gmTemplateFile);
+[template_wm_raw, ~] = nifti_read(wmTemplateFile);
+template_gm = resample_vol_to_size(double(template_gm_raw(:,:,:,1)), targetSize);
+template_wm = resample_vol_to_size(double(template_wm_raw(:,:,:,1)), targetSize);
 end

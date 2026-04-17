@@ -66,7 +66,7 @@ cfg.sliceSize = 64;       % 每层体素边长
 cfg.nDummy    = 6;        % 去除的起始 TR 数
 cfg.fwhm      = [6 6 6];  % 平滑核 FWHM（mm）
 cfg.normalize.boundingBox = [-90 -126 -72; 90 90 108];
-cfg.normalize.voxSize     = [3 3 3];
+cfg.normalize.voxSize     = [2 2 2];
 cfg.cond.onsets    = {[0 60 120 180 240], [30 90 150 210 270]};
 cfg.cond.durations = {30*ones(1,5),        30*ones(1,5)};
 ```
@@ -74,12 +74,16 @@ cfg.cond.durations = {30*ones(1,5),        30*ones(1,5)};
 还需配置模板绝对路径（必须）：
 
 ```matlab
-cfg.templates.dartel.gmTemplateNii = 'D:\...\Template_GM.nii';
-cfg.templates.dartel.wmTemplateNii = 'D:\...\Template_WM.nii';
-cfg.templates.standard.brainMaskNii = 'D:\...\BrainMask_2mm.nii';
-cfg.templates.standard.t1TemplateNii = 'D:\...\MNI152_T1_2mm.nii';
+cfg.templates.dartel.template4DNii = 'D:\DPABI_V9.0_250415\Templates\Template_6_EastAsian.nii';
+cfg.templates.dartel.gmVolumeIndex = 1; % 第1帧=GM
+cfg.templates.dartel.wmVolumeIndex = 2; % 第2帧=WM
+cfg.templates.standard.brainMaskNii = 'D:\DPABI_V9.0_250415\Templates\BrainMask_05_91x109x91.nii';
+cfg.templates.standard.t1TemplateNii = 'D:\DPABI_V9.0_250415\Templates\ch2bet.nii';
 cfg.visualization.brainTemplateNii = cfg.templates.standard.t1TemplateNii;
 ```
+
+> 兼容模式：若你已有独立 GM/WM 模板文件，也可继续使用  
+> `cfg.templates.dartel.gmTemplateNii` 与 `cfg.templates.dartel.wmTemplateNii`。
 
 > 启动时会执行 `validate_pipeline_config`，模板缺失会直接报错退出（fail-fast）。
 
