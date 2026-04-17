@@ -11,15 +11,55 @@ for i = 1:numel(mustExistDirs)
 end
 
 % -------- 模板路径检查（应用级）--------
-requiredTemplateFiles = {
-    cfg.templates.dartel.gmTemplateNii, ...
-    cfg.templates.dartel.wmTemplateNii, ...
+if ~isfield(cfg, 'templates') || ~isfield(cfg.templates, 'standard')
+    error('[validate_pipeline_config] 缺少 cfg.templates.standard 配置');
+end
+if ~isfield(cfg.templates.standard, 'brainMaskNii') || ~isfield(cfg.templates.standard, 't1TemplateNii')
+    error('[validate_pipeline_config] 缺少标准模板配置: brainMaskNii / t1TemplateNii');
+end
+requiredStandardTemplateFiles = {
     cfg.templates.standard.brainMaskNii, ...
     cfg.templates.standard.t1TemplateNii
 };
-for i = 1:numel(requiredTemplateFiles)
-    if ~exist(requiredTemplateFiles{i}, 'file')
-        error('[validate_pipeline_config] 模板文件不存在, 请在配置文件中填写正确绝对路径: %s', requiredTemplateFiles{i});
+for i = 1:numel(requiredStandardTemplateFiles)
+    if ~exist(requiredStandardTemplateFiles{i}, 'file')
+        error('[validate_pipeline_config] 模板文件不存在, 请在配置文件中填写正确绝对路径: %s', requiredStandardTemplateFiles{i});
+    end
+end
+
+if ~isfield(cfg.templates, 'dartel')
+    error('[validate_pipeline_config] 缺少 cfg.templates.dartel 配置');
+end
+hasDualFileDartel = isfield(cfg.templates.dartel, 'gmTemplateNii') && ...
+                    isfield(cfg.templates.dartel, 'wmTemplateNii') && ...
+                    ~isempty(cfg.templates.dartel.gmTemplateNii) && ...
+                    ~isempty(cfg.templates.dartel.wmTemplateNii);
+has4DDartel = isfield(cfg.templates.dartel, 'template4DNii') && ...
+              ~isempty(cfg.templates.dartel.template4DNii);
+if ~hasDualFileDartel && ~has4DDartel
+    error(['[validate_pipeline_config] DARTEL 模板配置缺失: ', ...
+           '请提供 (gmTemplateNii + wmTemplateNii) 或 (template4DNii + gmVolumeIndex + wmVolumeIndex)']);
+end
+if hasDualFileDartel
+    if ~exist(cfg.templates.dartel.gmTemplateNii, 'file') || ~exist(cfg.templates.dartel.wmTemplateNii, 'file')
+        error('[validate_pipeline_config] DARTEL 双文件模板不存在: GM=%s, WM=%s', ...
+            cfg.templates.dartel.gmTemplateNii, cfg.templates.dartel.wmTemplateNii);
+    end
+end
+if has4DDartel
+    if ~exist(cfg.templates.dartel.template4DNii, 'file')
+        error('[validate_pipeline_config] DARTEL 4D模板不存在: %s', cfg.templates.dartel.template4DNii);
+    end
+    if ~isfield(cfg.templates.dartel, 'gmVolumeIndex') || ~isfield(cfg.templates.dartel, 'wmVolumeIndex')
+        error('[validate_pipeline_config] 使用 template4DNii 时必须配置 gmVolumeIndex / wmVolumeIndex');
+    end
+    gmIdx = cfg.templates.dartel.gmVolumeIndex;
+    wmIdx = cfg.templates.dartel.wmVolumeIndex;
+    if any([gmIdx, wmIdx] < 1) || any(mod([gmIdx, wmIdx], 1) ~= 0)
+        error('[validate_pipeline_config] gmVolumeIndex / wmVolumeIndex 必须为正整数');
+    end
+    if gmIdx == wmIdx
+        error('[validate_pipeline_config] gmVolumeIndex 与 wmVolumeIndex 不能相同');
     end
 end
 
