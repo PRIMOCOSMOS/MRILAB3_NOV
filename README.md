@@ -18,7 +18,8 @@ MRILAB3_NOV/
 │   ├── nifti_write.m             % NIfTI 写出（standalone）
 │   ├── nifti_default_hdr.m       % 默认 NIfTI 头构建
 │   ├── trilinear_interp.m        % 3D 三线性插值
-│   └── rigid_mat.m               % 刚体变换矩阵（6参数）
+│   ├── rigid_mat.m               % 刚体变换矩阵（6参数）
+│   └── validate_pipeline_config.m% 开箱即用配置/模板校验
 │
 ├── io/                           % 格式转换
 │   ├── dicom2nifti_fun.m         % EPI MOSAIC DICOM → 4D NIfTI
@@ -42,6 +43,9 @@ MRILAB3_NOV/
 │   ├── compute_tcontrast.m       % T-contrast 统计图
 │   └── run_firstlevel_glm.m      % 一阶 GLM 主函数
 │
+├── visualize/                    % 结果可视化
+│   └── render_activation_3d.m    % 交互式3D激活渲染（可旋转）
+│
 └── register/                     % 配准（由 preprocess 调用）
 ```
 
@@ -51,7 +55,7 @@ MRILAB3_NOV/
 
 ### 1. 配置参数
 
-编辑 `config_sub01.m`，修改以下关键参数：
+编辑 `config_sub01.m`，修改以下关键参数（全部集中在一个文件中）：
 
 ```matlab
 cfg.funRawDir = 'D:\MRI_PRO\MRILAB3\BOLDCODE\BOLDDATA\FunRaw\Sub_01';
@@ -62,6 +66,18 @@ cfg.sliceSize = 64;       % 每层体素边长
 cfg.nDummy    = 10;       % 去除的起始 TR 数
 cfg.fwhm      = [6 6 6];  % 平滑核 FWHM（mm）
 ```
+
+还需配置模板绝对路径（必须）：
+
+```matlab
+cfg.templates.dartel.gmTemplateNii = 'D:\...\Template_GM.nii';
+cfg.templates.dartel.wmTemplateNii = 'D:\...\Template_WM.nii';
+cfg.templates.standard.brainMaskNii = 'D:\...\BrainMask_2mm.nii';
+cfg.templates.standard.t1TemplateNii = 'D:\...\MNI152_T1_2mm.nii';
+cfg.visualization.brainTemplateNii = cfg.templates.standard.t1TemplateNii;
+```
+
+> 启动时会执行 `validate_pipeline_config`，模板缺失会直接报错退出（fail-fast）。
 
 ### 2. 运行 Pipeline
 
@@ -91,6 +107,7 @@ run_pipeline_sub01;
 | 09 | 标准化（→ MNI）| FunImgAR | FunImgARW |
 | 10 | 空间平滑 | FunImgARW | FunImgARWS |
 | 11 | 一阶 GLM | FunImgARWS | Sub01_1stLevel |
+| 12 | 交互式3D渲染 | spmT_*.nii + 标准脑模板 | Sub01_1stLevel |
 
 ---
 
@@ -107,6 +124,7 @@ run_pipeline_sub01;
 - `Sub01_1stLevel/neg_log10p_*.nii` — -log10(p) 统计图
 - `Sub01_1stLevel/beta_*.nii` — 各回归参数估计图
 - `Sub01_1stLevel/design_matrix.png` — 设计矩阵可视化
+- `Sub01_1stLevel/Renderer3D_Activation.png` — 3D激活截图（可选）
 
 ---
 
@@ -124,6 +142,7 @@ run_pipeline_sub01;
 | Smooth | 可分离3D高斯卷积（3次1D卷积） |
 | GLM | OLS：β̂=(X'X)⁻¹X'Y，双伽马HRF，DCT漂移基函数 |
 | T-contrast | t=c'β̂/√(σ̂²c'(X'X)⁻¹c)，p值（t分布CDF） |
+| 3D Renderer | isosurface+patch+camlight+rotate3d 的交互式体渲染 |
 
 ---
 
