@@ -47,8 +47,8 @@ cfg.outDirs = { ...
 % 3) 默认命名参考 SPM/DPABI 常见模板，但实现不依赖这些工具箱
 cfg.templates.dartel.gmTemplateNii = 'D:\MRI_PRO\MRILAB3\Templates\EastAsian\Template_GM.nii';
 cfg.templates.dartel.wmTemplateNii = 'D:\MRI_PRO\MRILAB3\Templates\EastAsian\Template_WM.nii';
-cfg.templates.standard.brainMaskNii = 'D:\MRI_PRO\MRILAB3\Templates\MNI\BrainMask_2mm.nii';
-cfg.templates.standard.t1TemplateNii = 'D:\MRI_PRO\MRILAB3\Templates\MNI\MNI152_T1_2mm.nii';
+cfg.templates.standard.brainMaskNii = "D:\DPABI_V9.0_250415\Templates\BrainMask_05_97x115x97.nii";
+cfg.templates.standard.t1TemplateNii = "D:\DPABI_V9.0_250415\Templates\ch2bet.nii";
 
 % Renderer（交互式3D显示）所需模板
 cfg.visualization.enable = true;                     % 是否在1st-level后自动出3D交互图
