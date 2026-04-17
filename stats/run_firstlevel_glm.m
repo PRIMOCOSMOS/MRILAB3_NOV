@@ -119,10 +119,16 @@ hdr3d.nx = nx; hdr3d.ny = ny; hdr3d.nz = nz;
 hdr3d.dim = int16([3, nx, ny, nz, 1, 1, 1, 1]);
 
 fprintf('[run_firstlevel_glm] 计算 T-contrast: %s\n', cfg.tcons.name);
-[tMap, pMap, ~] = compute_tcontrast(...
+[tMap, pMap, ~, contrastFiles] = compute_tcontrast(...
     beta_all, sigma2_all, X, ...
     cfg.tcons.weight(:), ...
     hdr3d, outDir, cfg.tcons.name);
+
+% -------- 交互式3D激活可视化（现代 Renderer）--------
+if isfield(cfg, 'visualization') && isfield(cfg.visualization, 'enable') && cfg.visualization.enable
+    fprintf('[run_firstlevel_glm] 生成交互式3D激活图...\n');
+    render_activation_3d(contrastFiles.tFile, cfg.visualization.brainTemplateNii, outDir, cfg.visualization);
+end
 
 fprintf('[run_firstlevel_glm] === 一阶 GLM 分析完成 ===\n');
 fprintf('[run_firstlevel_glm] 输出目录: %s\n', outDir);

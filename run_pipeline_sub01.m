@@ -57,9 +57,13 @@ addpath(fullfile(pipelineDir, 'io'));
 addpath(fullfile(pipelineDir, 'preprocess'));
 addpath(fullfile(pipelineDir, 'register'));
 addpath(fullfile(pipelineDir, 'stats'));
+addpath(fullfile(pipelineDir, 'visualize'));
 
 % -------- 载入配置 --------
 cfg = config_sub01();
+
+% -------- 开箱即用配置校验（失败即退出）--------
+validate_pipeline_config(cfg);
 
 % -------- 创建输出目录 --------
 fprintf('[Pipeline] 创建输出目录...\n');

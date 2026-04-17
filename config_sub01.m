@@ -25,14 +25,37 @@ cfg.t1SegDir        = fullfile(cfg.baseDir, 'T1ImgNewSegment', cfg.subID);
 cfg.realignParamDir = fullfile(cfg.baseDir, 'RealignParameter',cfg.subID);
 cfg.firstLevelDir   = fullfile(cfg.baseDir, [cfg.subID '_1stLevel']);
 cfg.logDir          = fullfile(cfg.baseDir, 'Logs',            cfg.subID);
+cfg.reorientMatDir  = fullfile(cfg.baseDir, 'ReorientMats',    cfg.subID);
+cfg.qcDir           = fullfile(cfg.baseDir, 'QC',              cfg.subID);
+cfg.chkNormDir      = fullfile(cfg.baseDir, 'PicturesForChkNormalization', cfg.subID);
+cfg.maskDir         = fullfile(cfg.baseDir, 'Masks',           cfg.subID);
 
 % 所有输出目录列表，用于一键创建
 cfg.outDirs = {
     cfg.funImgDir,   cfg.funImgADir,  cfg.funImgARDir,
     cfg.funImgARWDir, cfg.funImgARWSDir,
     cfg.t1ImgDir,    cfg.t1ImgCoregDir, cfg.t1SegDir,
-    cfg.realignParamDir, cfg.firstLevelDir, cfg.logDir
+    cfg.realignParamDir, cfg.firstLevelDir, cfg.logDir, ...
+    cfg.reorientMatDir, cfg.qcDir, cfg.chkNormDir, cfg.maskDir
 };
+
+% ====== 应用级模板与资源路径（必须配置）======
+% 说明:
+% 1) 以下模板不随代码仓库分发，需使用者本地准备并填写绝对路径
+% 2) 所有模板会在 run_pipeline_sub01 启动时做 fail-fast 校验
+% 3) 默认命名参考 SPM/DPABI 常见模板，但实现不依赖这些工具箱
+cfg.templates.dartel.gmTemplateNii = 'D:\MRI_PRO\MRILAB3\Templates\EastAsian\Template_GM.nii';
+cfg.templates.dartel.wmTemplateNii = 'D:\MRI_PRO\MRILAB3\Templates\EastAsian\Template_WM.nii';
+cfg.templates.standard.brainMaskNii = 'D:\MRI_PRO\MRILAB3\Templates\MNI\BrainMask_2mm.nii';
+cfg.templates.standard.t1TemplateNii = 'D:\MRI_PRO\MRILAB3\Templates\MNI\MNI152_T1_2mm.nii';
+
+% Renderer（交互式3D显示）所需模板
+cfg.visualization.enable = true;                     % 是否在1st-level后自动出3D交互图
+cfg.visualization.tThreshold = 3.0;                 % T阈值
+cfg.visualization.alphaBrain = 0.15;                % 脑壳透明度
+cfg.visualization.alphaActivation = 0.85;           % 激活层透明度
+cfg.visualization.outputPng = true;                 % 是否导出静态截图
+cfg.visualization.brainTemplateNii = cfg.templates.standard.t1TemplateNii;
 
 % ====== EPI/MOSAIC 扫描参数 ======
 cfg.TR          = 2.0;      % 重复时间 (秒)
@@ -74,9 +97,10 @@ cfg.seg.nIter     = 100;  % GMM EM 最大迭代次数
 cfg.seg.mrfBeta   = 0.1;  % MRF 正则化系数 (0 = 不使用 MRF)
 
 % ====== 非线性配准（DARTEL 替代）======
-cfg.dartel.nLevels  = 3;    % 多分辨率层数
-cfg.dartel.nIter    = [3 3 6];  % 各分辨率层迭代次数
-cfg.dartel.reg      = 1.0;  % 正则化权重
+cfg.dartel.nLevels  = 4;            % 多分辨率层数
+cfg.dartel.nIter    = [3 3 6 8];    % 各分辨率层迭代次数
+cfg.dartel.reg      = 1.0;          % 正则化权重
+cfg.dartel.svfIntegrationSteps = 6; % scaling&squaring 步数
 
 % ====== 标准化目标空间 ======
 % MNI 152 标准空间网格参数（2mm 各向同性）

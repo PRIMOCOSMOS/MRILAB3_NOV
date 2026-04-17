@@ -43,11 +43,19 @@ nLevels = cfg.dartel.nLevels;
 nIter   = cfg.dartel.nIter;
 reg     = cfg.dartel.reg;
 
-% -------- 构造目标模板（简单高斯先验：GM=0.5, WM=0.35, CSF=0.15 的球状）--------
-% 实际应用中应使用东亚人脑模板（East Asian Brain Template）；
-% 此处构建一个简单的球状模板作为演示（不影响框架逻辑）
-template_gm = make_sphere_template(nx, ny, nz, 0.5);
-template_wm = make_sphere_template(nx, ny, nz, 0.35) * 0.7;
+% -------- 加载真实模板（东亚模板或用户提供模板）--------
+if ~isfield(cfg, 'templates') || ~isfield(cfg.templates, 'dartel')
+    error('[dartel_warp] 缺少 cfg.templates.dartel 配置');
+end
+gmTemplateFile = cfg.templates.dartel.gmTemplateNii;
+wmTemplateFile = cfg.templates.dartel.wmTemplateNii;
+if ~exist(gmTemplateFile, 'file') || ~exist(wmTemplateFile, 'file')
+    error('[dartel_warp] 模板文件不存在，请检查配置: GM=%s WM=%s', gmTemplateFile, wmTemplateFile);
+end
+[template_gm_raw, ~] = nifti_read(gmTemplateFile);
+[template_wm_raw, ~] = nifti_read(wmTemplateFile);
+template_gm = resample_vol_to_size(double(template_gm_raw(:,:,:,1)), [nx ny nz]);
+template_wm = resample_vol_to_size(double(template_wm_raw(:,:,:,1)), [nx ny nz]);
 
 % -------- 初始化速度场 --------
 % 速度场 v: [nx ny nz 3]，单位为体素位移
@@ -143,16 +151,6 @@ end
 % 内部辅助函数
 % ======================================================================
 
-function tmpl = make_sphere_template(nx, ny, nz, maxVal)
-% 构造以图像中心为球心的球形先验模板
-[X, Y, Z] = ndgrid(1:nx, 1:ny, 1:nz);
-cx = nx/2; cy = ny/2; cz = nz/2;
-r  = min([cx cy cz]) * 0.8;
-dist = sqrt((X-cx).^2 + (Y-cy).^2 + (Z-cz).^2);
-tmpl = maxVal * double(dist < r) .* (1 - dist/(r*1.2));
-tmpl = max(tmpl, 0);
-end
-
 function disp = integrate_svf(v, nSteps)
 % 将稳态速度场 v 通过 scaling & squaring 积分为位移场
 % v: [nx ny nz 3]
@@ -247,4 +245,19 @@ L(:,2:end,:)   = L(:,2:end,:)   + V(:,1:end-1,:);
 L(:,1:end-1,:) = L(:,1:end-1,:) + V(:,2:end,:);
 L(:,:,2:end)   = L(:,:,2:end)   + V(:,:,1:end-1);
 L(:,:,1:end-1) = L(:,:,1:end-1) + V(:,:,2:end);
+end
+
+function V2 = resample_vol_to_size(V, targetSize)
+% 三线性重采样到目标尺寸（仅尺寸匹配，不改变强度统计趋势）
+[nx, ny, nz] = size(V);
+tx = targetSize(1); ty = targetSize(2); tz = targetSize(3);
+if nx == tx && ny == ty && nz == tz
+    V2 = V;
+    return;
+end
+[Xt, Yt, Zt] = ndgrid(1:tx, 1:ty, 1:tz);
+Xs = (Xt - 1) * (nx - 1) / max(tx - 1, 1) + 1;
+Ys = (Yt - 1) * (ny - 1) / max(ty - 1, 1) + 1;
+Zs = (Zt - 1) * (nz - 1) / max(tz - 1, 1) + 1;
+V2 = reshape(trilinear_interp(V, [Xs(:)'; Ys(:)'; Zs(:)']), tx, ty, tz);
 end

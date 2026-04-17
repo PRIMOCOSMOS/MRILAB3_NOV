@@ -1,4 +1,4 @@
-function [tMap, pMap, betaConMap] = compute_tcontrast(beta, sigma2, X, contrast, hdr, outDir, contrastName)
+function [tMap, pMap, betaConMap, outFiles] = compute_tcontrast(beta, sigma2, X, contrast, hdr, outDir, contrastName)
 % compute_tcontrast - 计算 T-contrast 统计图并写出结果
 %
 % T-统计量公式:
@@ -111,6 +111,12 @@ SPM_result.n_sig_vox    = sum(abs(tVec) > 3);
 matFile = fullfile(outDir, sprintf('SPMresult_%s.mat', safeName));
 save(matFile, 'SPM_result');
 fprintf('[compute_tcontrast] 结果已保存: %s\n', matFile);
+
+outFiles = struct();
+outFiles.tFile = tFile;
+outFiles.pFile = pFile;
+outFiles.conFile = bFile;
+outFiles.matFile = matFile;
 end
 
 % ======================================================================
