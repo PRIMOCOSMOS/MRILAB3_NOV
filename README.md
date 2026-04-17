@@ -82,7 +82,7 @@ cfg.templates.standard.t1TemplateNii = 'D:\DPABI_V9.0_250415\Templates\ch2bet.ni
 cfg.visualization.brainTemplateNii = cfg.templates.standard.t1TemplateNii;
 ```
 
-> 兼容模式：若你已有独立 GM/WM 模板文件，也可继续使用  
+> 兼容模式：若你已有独立 GM/WM 模板文件，也可继续使用
 > `cfg.templates.dartel.gmTemplateNii` 与 `cfg.templates.dartel.wmTemplateNii`。
 
 > 启动时会执行 `validate_pipeline_config`，模板缺失会直接报错退出（fail-fast）。
