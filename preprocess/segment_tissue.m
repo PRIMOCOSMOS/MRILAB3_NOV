@@ -2,6 +2,9 @@ function [gmFile, wmFile, csfFile] = segment_tissue(t1File, outDir, cfg)
 % segment_tissue - 基于 GMM（高斯混合模型）+ EM 算法的 T1 脑组织分割
 % 将 T1 脑图像分割为三类: GM（灰质）、WM（白质）、CSF（脑脊液）
 % 完全 standalone，不依赖 SPM 或任何工具箱
+% 注意:
+%   为保持强度升序映射，本实现输出编号为 c1=CSF, c2=GM, c3=WM；
+%   这与 SPM 常见命名（c1=GM, c2=WM, c3=CSF）不同，请在后续分析中留意。
 %
 % 方法:
 %   1. K-means 初始化 GMM 参数（均值、方差、混合权重）

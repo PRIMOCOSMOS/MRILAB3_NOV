@@ -32,6 +32,8 @@ fprintf('[run_firstlevel_glm] 构建设计矩阵...\n');
 nConds = numel(cfg.cond.names);
 % X_base = [条件(nConds) | 常数(1) | 漂移(k)]
 % 插入运动参数：[条件 | 运动(6) | 常数 | 漂移]
+% 说明：该顺序与 SPM 常用建模习惯一致，便于保持条件列索引稳定，
+% 同时将运动参数作为 nuisance regressors 放在任务条件后、漂移项前。
 nConstDrift = size(X_base,2) - nConds;
 X = [X_base(:, 1:nConds), rp, X_base(:, nConds+1:end)];
 

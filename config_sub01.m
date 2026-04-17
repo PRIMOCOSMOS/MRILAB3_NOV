@@ -104,8 +104,7 @@ cfg.dartel.svfIntegrationSteps = 6; % scaling&squaring 步数
 
 % ====== 标准化目标空间 ======
 % MNI 152 标准空间网格参数（2mm 各向同性）
-cfg.mni.origin  = [91 109 91];   % MNI 模板中心体素坐标（1-based），对应世界坐标 [0 0 0] mm
-                                  % 即仿射矩阵平移分量: T = -voxSize * (origin - 1)
+cfg.mni.origin  = [46 55 46];    % MNI 原点体素坐标（1-based，约为 [0,0,0] mm 位置）
 cfg.mni.voxSize = [2 2 2];       % 体素尺寸 (mm)
 cfg.mni.dims    = [91 109 91];   % 图像维度
 

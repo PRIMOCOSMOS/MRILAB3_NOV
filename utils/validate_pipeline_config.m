@@ -19,7 +19,7 @@ requiredTemplateFiles = {
 };
 for i = 1:numel(requiredTemplateFiles)
     if ~exist(requiredTemplateFiles{i}, 'file')
-        error('[validate_pipeline_config] 模板文件不存在，请在 config_sub01.m 配置正确绝对路径: %s', requiredTemplateFiles{i});
+        error('[validate_pipeline_config] 模板文件不存在，请在配置文件中填写正确绝对路径: %s', requiredTemplateFiles{i});
     end
 end
 
@@ -51,4 +51,3 @@ if numel(cfg.tcons.weight) < numel(cfg.cond.names)
         numel(cfg.tcons.weight), numel(cfg.cond.names));
 end
 end
-

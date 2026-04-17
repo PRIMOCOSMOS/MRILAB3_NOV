@@ -137,7 +137,11 @@ fprintf('[realign] 参数估计完成，最大平移=%.2fmm，最大旋转=%.4fr
 % -------- 写出头动参数文件（rp_*.txt）--------
 ensure_dir(rpDir);
 rpFile = fullfile(rpDir, sprintf('rp_%s.txt', cfg.subID));
-dlmwrite(rpFile, params, 'delimiter', '\t', 'precision', 8);
+if exist('writematrix', 'file')
+    writematrix(params, rpFile, 'Delimiter', 'tab');
+else
+    dlmwrite(rpFile, params, 'delimiter', '\t', 'precision', 8); %#ok<DLMWRT>
+end
 fprintf('[realign] 头动参数已写出: %s\n', rpFile);
 
 % -------- 重采样所有时间点到参考空间 --------

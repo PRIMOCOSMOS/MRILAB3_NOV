@@ -64,7 +64,7 @@ if ~isempty(fvAct.vertices)
     pAct.EdgeColor = 'none';
     pAct.FaceAlpha = alphaAct;
     colormap(ax, hot(256));
-    colorbar('peer', ax, 'Color', 'w');
+    colorbar(ax, 'Color', 'w');
 end
 
 rotate3d(ax, 'on'); % 交互旋转
@@ -87,4 +87,3 @@ Ys = (Yt - 1) * (ny - 1) / max(ty - 1, 1) + 1;
 Zs = (Zt - 1) * (nz - 1) / max(tz - 1, 1) + 1;
 V2 = reshape(trilinear_interp(V, [Xs(:)'; Ys(:)'; Zs(:)']), tx, ty, tz);
 end
-

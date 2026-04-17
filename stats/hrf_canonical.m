@@ -80,8 +80,8 @@ function g = gamma_func(n)
 % 伽马函数 Γ(n) = (n-1)! 对正实数的推广
 % 使用 Stirling 近似或精确递推
 if n == round(n) && n > 0
-    % 整数情况: Γ(n) = (n-1)!
-    g = factorial(n-1);
+    % 整数情况: Γ(n) = (n-1)!，使用 gammaln 提升数值稳定性
+    g = exp(gammaln(n));
 else
     % 使用 MATLAB 内置（仅 gamma 本身不需要工具箱）
     g = gamma(n);

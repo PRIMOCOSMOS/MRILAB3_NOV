@@ -118,6 +118,7 @@ run_pipeline_sub01;
 - `T1ImgNewSegment/c1_t1.nii` — CSF 概率图
 - `T1ImgNewSegment/c2_t1.nii` — GM 概率图
 - `T1ImgNewSegment/c3_t1.nii` — WM 概率图
+- 注意：本项目使用强度升序编号（c1=CSF,c2=GM,c3=WM），与SPM默认编号不同
 - `T1ImgNewSegment/u_rc1_Template.nii` — 非线性位移场（4D, 第4维=3方向）
 - `Sub01_1stLevel/SPM.mat` — GLM 结果（MATLAB 变量，SPM 命名兼容）
 - `Sub01_1stLevel/spmT_*.nii` — T 统计图
