@@ -65,13 +65,14 @@ if isfield(cfg, 'templates') && isfield(cfg.templates, 'standard') && ...
    isfield(cfg.templates.standard, 'brainMaskNii') && ...
    exist(cfg.templates.standard.brainMaskNii, 'file')
     try
+        stdMaskThreshold = 0.5;
         [maskData, ~] = nifti_read(cfg.templates.standard.brainMaskNii);
         maskVol = double(maskData(:,:,:,1));
         if any(size(maskVol) ~= [nx ny nz])
             maskVol = resample_to_size(maskVol, [nx ny nz]);
             fprintf('[run_firstlevel_glm] 标准脑掩模尺寸已重采样到 [%d %d %d]\n', nx, ny, nz);
         end
-        stdMask = maskVol >= 0.5;
+        stdMask = maskVol >= stdMaskThreshold;
         if any(stdMask(:))
             brainMask = brainMask & stdMask;
             fprintf('[run_firstlevel_glm] 已应用标准脑掩模: %s\n', cfg.templates.standard.brainMaskNii);

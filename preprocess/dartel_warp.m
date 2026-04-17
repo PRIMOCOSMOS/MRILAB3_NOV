@@ -273,14 +273,14 @@ if has4DTemplate
     end
     gmIdx = cfg.templates.dartel.gmVolumeIndex;
     wmIdx = cfg.templates.dartel.wmVolumeIndex;
-    if any([gmIdx, wmIdx] < 1) || any(floor([gmIdx, wmIdx]) ~= [gmIdx, wmIdx])
+    if any([gmIdx, wmIdx] < 1) || any(mod([gmIdx, wmIdx], 1) ~= 0)
         error('[dartel_warp] gmVolumeIndex / wmVolumeIndex 必须为正整数');
+    end
+    if gmIdx == wmIdx
+        error('[dartel_warp] gmVolumeIndex 与 wmVolumeIndex 不能相同');
     end
 
     [template4D, ~] = nifti_read(template4DFile);
-    if ndims(template4D) < 4
-        error('[dartel_warp] 4D模板文件不包含第4维: %s', template4DFile);
-    end
     nVols = size(template4D, 4);
     if gmIdx > nVols || wmIdx > nVols
         error('[dartel_warp] 4D模板帧数不足: 需要 GM=%d WM=%d, 实际=%d', gmIdx, wmIdx, nVols);

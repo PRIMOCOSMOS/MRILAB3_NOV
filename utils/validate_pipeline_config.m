@@ -55,8 +55,11 @@ if has4DDartel
     end
     gmIdx = cfg.templates.dartel.gmVolumeIndex;
     wmIdx = cfg.templates.dartel.wmVolumeIndex;
-    if any([gmIdx, wmIdx] < 1) || any(floor([gmIdx, wmIdx]) ~= [gmIdx, wmIdx])
+    if any([gmIdx, wmIdx] < 1) || any(mod([gmIdx, wmIdx], 1) ~= 0)
         error('[validate_pipeline_config] gmVolumeIndex / wmVolumeIndex 必须为正整数');
+    end
+    if gmIdx == wmIdx
+        error('[validate_pipeline_config] gmVolumeIndex 与 wmVolumeIndex 不能相同');
     end
 end
 
