@@ -126,7 +126,7 @@ cfg.units = 'secs';   % onset/duration 单位
 % 总 TR=156，TR=2s；去掉前6TR 后剩余 150TR（300s）
 % Task 15TR(30s) + Rest 15TR(30s)，重复 5 次
 cfg.cond.names     = {'Task', 'Rest'};
-cfg.cond.onsets    = {[0 60 120 180 240], [30 90 150 210 270]};  % 秒（以去dummy后时间轴为0）
+cfg.cond.onsets    = {[0 60 120 180 240], [30 90 150 210 270]};  % 秒（相对于去除6个dummy TR后的时间起点）
 cfg.cond.durations = {30*ones(1,5),        30*ones(1,5)};         % 秒
 
 % T-contrast: Task > Rest

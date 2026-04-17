@@ -198,7 +198,6 @@ write_log(logFile, sprintf('  BET Mask: %s', t1Mask_Bet));
 write_log(logFile, 'Step07: T1 Coreg to Fun');
 fprintf('\n--- Step 07: Coreg T1 → Fun ---\n');
 
-[~, t1Base_Ro] = fileparts(t1Nii_Ro);
 t1Nii_Coreg = fullfile(cfg.t1ImgCoregDir, ['coreg_' t1Base_Ro '.nii']);
 if ~exist(t1Nii_Coreg, 'file')
     [t1Nii_Coreg, ~] = coreg_t1_to_fun(t1Nii_Bet, funNii_Ro, cfg.t1ImgCoregDir);
