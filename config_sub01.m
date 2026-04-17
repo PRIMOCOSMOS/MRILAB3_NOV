@@ -20,6 +20,7 @@ cfg.funImgARDir     = fullfile(cfg.baseDir, 'FunImgAR',        cfg.subID);  % Re
 cfg.funImgARWDir    = fullfile(cfg.baseDir, 'FunImgARW',       cfg.subID);  % Normalized
 cfg.funImgARWSDir   = fullfile(cfg.baseDir, 'FunImgARWS',      cfg.subID);  % Smoothed
 cfg.t1ImgDir        = fullfile(cfg.baseDir, 'T1Img',           cfg.subID);
+cfg.t1ImgBetDir     = fullfile(cfg.baseDir, 'T1ImgBet',        cfg.subID);  % BET 后的 T1
 cfg.t1ImgCoregDir   = fullfile(cfg.baseDir, 'T1ImgCoreg',      cfg.subID);
 cfg.t1SegDir        = fullfile(cfg.baseDir, 'T1ImgNewSegment', cfg.subID);
 cfg.realignParamDir = fullfile(cfg.baseDir, 'RealignParameter',cfg.subID);
@@ -34,7 +35,7 @@ cfg.maskDir         = fullfile(cfg.baseDir, 'Masks',           cfg.subID);
 cfg.outDirs = { ...
     cfg.funImgDir,   cfg.funImgADir,  cfg.funImgARDir, ...
     cfg.funImgARWDir, cfg.funImgARWSDir, ...
-    cfg.t1ImgDir,    cfg.t1ImgCoregDir, cfg.t1SegDir, ...
+    cfg.t1ImgDir, cfg.t1ImgBetDir, cfg.t1ImgCoregDir, cfg.t1SegDir, ...
     cfg.realignParamDir, cfg.firstLevelDir, cfg.logDir, ...
     cfg.reorientMatDir, cfg.qcDir, cfg.chkNormDir, cfg.maskDir ...
 };
@@ -76,7 +77,7 @@ cfg.sliceTimingMs = [0 1430 880 330 1760 1210 660 110 1540 990 440 1870 ...
 cfg.refSliceIdx = 18;  % 第18层（1-based index），对应时间 cfg.sliceTimingMs(18)
 
 % ====== 去除起始不稳定 TR ======
-cfg.nDummy = 10;  % 去掉前10个TR（根据实验协议修改）
+cfg.nDummy = 6;  % 去掉前6个TR（本实验协议）
 
 % ====== 头动校正参数 ======
 cfg.realign.quality   = 0.9;   % 降采样质量因子 (0-1)
@@ -89,6 +90,10 @@ cfg.realign.tol       = 1e-8;  % 收敛阈值
 % ====== 空间平滑 ======
 cfg.fwhm = [6 6 6];  % 高斯核 FWHM (mm) [x y z]
 
+% ====== T1 脑提取（BET）参数 ======
+cfg.bet.percentile = 20;   % 强度阈值百分位（越大掩模越紧）
+cfg.bet.smoothSigma = 1.0; % 掩模平滑核 sigma（体素）；0 表示不平滑
+
 % ====== 分割参数 ======
 cfg.seg.nClasses  = 3;    % 分割类别数 (GM, WM, CSF)
 cfg.seg.nIter     = 100;  % GMM EM 最大迭代次数
@@ -100,21 +105,29 @@ cfg.dartel.nIter    = [3 3 6 8];    % 各分辨率层迭代次数
 cfg.dartel.reg      = 1.0;          % 正则化权重
 cfg.dartel.svfIntegrationSteps = 6; % scaling&squaring 步数
 
-% ====== 标准化目标空间 ======
-% MNI 152 标准空间网格参数（2mm 各向同性）
-cfg.mni.origin  = [46 55 46];    % MNI 原点体素坐标（1-based, 按当前 dims 中心估计）
-                                 % 如使用其他 MNI 模板（如 y=64 版本），请按模板头信息调整
-cfg.mni.voxSize = [2 2 2];       % 体素尺寸 (mm)
-cfg.mni.dims    = [91 109 91];   % 图像维度
+% ====== 标准化目标空间（可配置：Bounding box + Voxel size）======
+% 参照 DPABI 参数形式：
+%   Bounding box: [xmin ymin zmin; xmax ymax zmax]（单位 mm）
+%   Voxel size:   [vx vy vz]（单位 mm）
+cfg.normalize.boundingBox = [-90 -126 -72; 90 90 108];
+cfg.normalize.voxSize     = [3 3 3];
+
+% 兼容 normalize_apply 的网格参数（由 bbox 与 voxel size 自动推导）
+bboxMin = cfg.normalize.boundingBox(1,:);
+bboxMax = cfg.normalize.boundingBox(2,:);
+cfg.normalize.dims = round((bboxMax - bboxMin) ./ cfg.normalize.voxSize) + 1;
+cfg.normalize.origin = 1 - bboxMin ./ cfg.normalize.voxSize;  % 1-based 原点
 
 % ====== 一阶 GLM 参数 ======
 cfg.hpf   = 128;      % 高通滤波截止周期 (秒)
 cfg.units = 'secs';   % onset/duration 单位
 
-% 示例任务条件（按实际实验设计修改）
+% 任务设计（本实验协议）
+% 总 TR=156，TR=2s；去掉前6TR 后剩余 150TR（300s）
+% Task 15TR(30s) + Rest 15TR(30s)，重复 5 次
 cfg.cond.names     = {'Task', 'Rest'};
-cfg.cond.onsets    = {[20 60 100 140], [0 40 80 120]};   % 每个 onset (秒)
-cfg.cond.durations = {[20 20 20 20],   [20 20 20 20]};   % 持续时间 (秒)
+cfg.cond.onsets    = {[0 60 120 180 240], [30 90 150 210 270]};  % 秒（以去dummy后时间轴为0）
+cfg.cond.durations = {30*ones(1,5),        30*ones(1,5)};         % 秒
 
 % T-contrast: Task > Rest
 cfg.tcons.name   = 'Task_gt_Rest';

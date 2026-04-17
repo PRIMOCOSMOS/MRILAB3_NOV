@@ -14,10 +14,14 @@ function outFile = normalize_apply(inFile, flowFile, outDir, mniCfg)
 %   inFile   - 输入 4D NIfTI 文件（个体空间）
 %   flowFile - 位移场 NIfTI 文件（由 dartel_warp 生成, [nx ny nz 3]）
 %   outDir   - 输出目录
-%   mniCfg   - MNI 目标网格配置:
-%               mniCfg.dims    = [91 109 91]（2mm 各向同性）
-%               mniCfg.voxSize = [2 2 2]（mm）
-%               mniCfg.origin  = [46 64 37]（原点体素，1-based）
+%   mniCfg   - 目标网格配置（两种格式均支持）:
+%              A) DPABI风格:
+%                 mniCfg.boundingBox = [xmin ymin zmin; xmax ymax zmax]（mm）
+%                 mniCfg.voxSize     = [vx vy vz]（mm）
+%              B) 传统网格:
+%                 mniCfg.dims    = [nx ny nz]
+%                 mniCfg.voxSize = [vx vy vz]
+%                 mniCfg.origin  = [ox oy oz]（1-based）
 %
 % 输出:
 %   outFile - 标准化后的 4D NIfTI 文件路径（前缀 'w'）
@@ -37,9 +41,7 @@ if nd ~= 3
 end
 
 % -------- MNI 目标网格参数 --------
-mni_dims   = mniCfg.dims(:)';
-mni_vox    = mniCfg.voxSize(:)';
-mni_origin = mniCfg.origin(:)';
+[mni_dims, mni_vox, mni_origin] = parse_target_grid(mniCfg);
 
 mx = mni_dims(1); my = mni_dims(2); mz = mni_dims(3);
 
@@ -122,4 +124,32 @@ ensure_dir(outDir);
 outFile = fullfile(outDir, ['w' fname ext]);
 nifti_write(outFile, dataOut, hdrOut);
 fprintf('[normalize_apply] 已写出: %s  [%d %d %d %d]\n', outFile, mx, my, mz, nt);
+end
+
+function [dims, vox, origin] = parse_target_grid(cfgIn)
+% 兼容两类标准化目标参数格式
+if isfield(cfgIn, 'boundingBox')
+    bbox = cfgIn.boundingBox;
+    if ~isequal(size(bbox), [2 3])
+        error('[normalize_apply] boundingBox 必须为 2x3 矩阵');
+    end
+    if ~isfield(cfgIn, 'voxSize')
+        error('[normalize_apply] 使用 boundingBox 时必须提供 voxSize');
+    end
+    vox = cfgIn.voxSize(:)';
+    if numel(vox) ~= 3 || any(vox <= 0)
+        error('[normalize_apply] voxSize 必须为 1x3 正数向量');
+    end
+    bboxMin = bbox(1,:);
+    bboxMax = bbox(2,:);
+    dims = round((bboxMax - bboxMin) ./ vox) + 1;
+    origin = 1 - bboxMin ./ vox;
+else
+    if ~isfield(cfgIn, 'dims') || ~isfield(cfgIn, 'voxSize') || ~isfield(cfgIn, 'origin')
+        error('[normalize_apply] 目标网格配置缺少字段，需提供 boundingBox+voxSize 或 dims+voxSize+origin');
+    end
+    dims = cfgIn.dims(:)';
+    vox = cfgIn.voxSize(:)';
+    origin = cfgIn.origin(:)';
+end
 end

@@ -30,6 +30,7 @@ MRILAB3_NOV/
 │   ├── slice_timing_corr.m       % 切片时序校正（傅里叶时移）
 │   ├── realign_estimate_reslice.m% 头动校正（Gauss-Newton）+ rp_*.txt
 │   ├── reorient_set_origin.m     % 坐标原点重定位到 AC
+│   ├── brain_extract_t1.m        % T1 脑提取（BET）
 │   ├── coreg_t1_to_fun.m         % T1 配准到功能像（互信息）
 │   ├── segment_tissue.m          % GMM 组织分割（GM/WM/CSF）
 │   ├── dartel_warp.m             % 非线性配准（SVF/DARTEL 替代）
@@ -46,7 +47,6 @@ MRILAB3_NOV/
 ├── visualize/                    % 结果可视化
 │   └── render_activation_3d.m    % 交互式3D激活渲染（可旋转）
 │
-└── register/                     % 配准（由 preprocess 调用）
 ```
 
 ---
@@ -63,8 +63,12 @@ cfg.t1RawDir  = 'D:\MRI_PRO\MRILAB3\BOLDCODE\BOLDDATA\T1Raw\Sub_01';
 cfg.TR        = 2.0;      % 重复时间（秒）
 cfg.nSlices   = 36;       % EPI 层数
 cfg.sliceSize = 64;       % 每层体素边长
-cfg.nDummy    = 10;       % 去除的起始 TR 数
+cfg.nDummy    = 6;        % 去除的起始 TR 数
 cfg.fwhm      = [6 6 6];  % 平滑核 FWHM（mm）
+cfg.normalize.boundingBox = [-90 -126 -72; 90 90 108];
+cfg.normalize.voxSize     = [3 3 3];
+cfg.cond.onsets    = {[0 60 120 180 240], [30 90 150 210 270]};
+cfg.cond.durations = {30*ones(1,5),        30*ones(1,5)};
 ```
 
 还需配置模板绝对路径（必须）：
@@ -92,7 +96,7 @@ run_pipeline_sub01;
 
 ---
 
-## 处理流程（11步）
+## 处理流程（13步）
 
 | 步骤 | 操作 | 输入 | 输出目录 |
 |------|------|------|----------|
@@ -101,13 +105,14 @@ run_pipeline_sub01;
 | 03 | Slice Timing 校正 | FunImgA | FunImgA（st前缀）|
 | 04 | 头动校正（Realign）| FunImgA | FunImgAR + RealignParameter |
 | 05 | 重定位（Reorient）| FunImgAR / T1Img | 原目录（reorient前缀）|
-| 06 | T1 配准到 Fun | T1Img | T1ImgCoreg |
-| 07 | 组织分割 | T1ImgCoreg | T1ImgNewSegment |
-| 08 | DARTEL 非线性配准 | T1ImgNewSegment | T1ImgNewSegment（流场）|
-| 09 | 标准化（→ MNI）| FunImgAR | FunImgARW |
-| 10 | 空间平滑 | FunImgARW | FunImgARWS |
-| 11 | 一阶 GLM | FunImgARWS | Sub01_1stLevel |
-| 12 | 交互式3D渲染 | spmT_*.nii + 标准脑模板 | Sub01_1stLevel |
+| 06 | T1 脑提取（BET） | T1Img（reorient后） | T1ImgBet |
+| 07 | T1 配准到 Fun | T1ImgBet | T1ImgCoreg |
+| 08 | 组织分割 | T1ImgCoreg | T1ImgNewSegment |
+| 09 | DARTEL 非线性配准 | T1ImgNewSegment | T1ImgNewSegment（流场）|
+| 10 | 标准化（→ MNI）| FunImgAR | FunImgARW |
+| 11 | 空间平滑 | FunImgARW | FunImgARWS |
+| 12 | 一阶 GLM | FunImgARWS | Sub01_1stLevel |
+| 13 | 交互式3D渲染 | spmT_*.nii + 标准脑模板 | Sub01_1stLevel |
 
 ---
 
@@ -115,6 +120,8 @@ run_pipeline_sub01;
 
 - `FunImgARWS/s*.nii` — 预处理完成的4D功能像（MNI空间，平滑后）
 - `RealignParameter/rp_Sub_01.txt` — 头动参数（nT×6，单位：mm/rad）
+- `T1ImgBet/bet_reorient_*.nii` — BET 后的 T1 结构像
+- `T1ImgBet/betmask_reorient_*.nii` — BET 生成的脑掩模
 - `T1ImgNewSegment/c1_t1.nii` — CSF 概率图
 - `T1ImgNewSegment/c2_t1.nii` — GM 概率图
 - `T1ImgNewSegment/c3_t1.nii` — WM 概率图
