@@ -55,7 +55,6 @@ pipelineDir = fileparts(mfilename('fullpath'));
 addpath(fullfile(pipelineDir, 'utils'));
 addpath(fullfile(pipelineDir, 'io'));
 addpath(fullfile(pipelineDir, 'preprocess'));
-addpath(fullfile(pipelineDir, 'register'));
 addpath(fullfile(pipelineDir, 'stats'));
 addpath(fullfile(pipelineDir, 'visualize'));
 
