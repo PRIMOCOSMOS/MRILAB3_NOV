@@ -311,17 +311,3 @@ fprintf('[dartel_warp] 使用双文件模板: GM=%s, WM=%s\n', gmTemplateFile, w
 template_gm = double(template_gm_raw(:,:,:,1));
 template_wm = double(template_wm_raw(:,:,:,1));
 end
-
-function V_tgt = resample_vol_affine(V_src, src_affine, tgt_affine, tgt_dims)
-% resample_vol_affine - 使用仿射矩阵将源体数据重采样到目标坐标空间
-% 对每个目标体素，通过仿射链计算对应源体素坐标，三线性插值采样
-% 此局部函数与 utils/resample_vol_affine.m 逻辑相同
-tx = tgt_dims(1); ty = tgt_dims(2); tz = tgt_dims(3);
-[Xt, Yt, Zt] = ndgrid(1:tx, 1:ty, 1:tz);
-nTgt = tx * ty * tz;
-tgt_vox_0 = [Xt(:)'-1; Yt(:)'-1; Zt(:)'-1; ones(1, nTgt)];
-tgt_world  = tgt_affine * tgt_vox_0;
-src_vox_1  = (src_affine \ tgt_world);
-src_vox_1  = src_vox_1(1:3,:) + 1;
-V_tgt = reshape(trilinear_interp(V_src, src_vox_1), tx, ty, tz);
-end

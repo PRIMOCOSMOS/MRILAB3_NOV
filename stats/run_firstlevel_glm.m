@@ -165,15 +165,3 @@ end
 fprintf('[run_firstlevel_glm] === 一阶 GLM 分析完成 ===\n');
 fprintf('[run_firstlevel_glm] 输出目录: %s\n', outDir);
 end
-
-function V_tgt = resample_vol_affine(V_src, src_affine, tgt_affine, tgt_dims)
-% resample_vol_affine - 使用仿射矩阵将源体数据重采样到目标坐标空间
-tx = tgt_dims(1); ty = tgt_dims(2); tz = tgt_dims(3);
-[Xt, Yt, Zt] = ndgrid(1:tx, 1:ty, 1:tz);
-nTgt = tx * ty * tz;
-tgt_vox_0 = [Xt(:)'-1; Yt(:)'-1; Zt(:)'-1; ones(1, nTgt)];
-tgt_world  = tgt_affine * tgt_vox_0;
-src_vox_1  = (src_affine \ tgt_world);
-src_vox_1  = src_vox_1(1:3,:) + 1;
-V_tgt = reshape(trilinear_interp(V_src, src_vox_1), tx, ty, tz);
-end
