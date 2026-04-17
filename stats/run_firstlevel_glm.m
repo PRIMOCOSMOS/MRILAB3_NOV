@@ -59,6 +59,35 @@ catch; end
 meanVol = mean(data4d, 4);
 thresh  = prctile(meanVol(:), 30);  % 取第30百分位数作为阈值
 brainMask = meanVol > thresh;
+
+% 优先叠加标准空间脑掩模（若已配置）
+if isfield(cfg, 'templates') && isfield(cfg.templates, 'standard') && ...
+   isfield(cfg.templates.standard, 'brainMaskNii') && ...
+   exist(cfg.templates.standard.brainMaskNii, 'file')
+    try
+        stdMaskThreshold = 0.5;
+        [maskData, ~] = nifti_read(cfg.templates.standard.brainMaskNii);
+        maskVol = double(maskData(:,:,:,1));
+        if any(size(maskVol) ~= [nx ny nz])
+            maskVol = resample_to_size(maskVol, [nx ny nz]);
+            fprintf('[run_firstlevel_glm] 标准脑掩模尺寸已重采样到 [%d %d %d]\n', nx, ny, nz);
+        end
+        stdMask = maskVol >= stdMaskThreshold;
+        if any(stdMask(:))
+            brainMask = brainMask & stdMask;
+            fprintf('[run_firstlevel_glm] 已应用标准脑掩模: %s\n', cfg.templates.standard.brainMaskNii);
+        else
+            warning('[run_firstlevel_glm] 标准脑掩模为空，回退到强度阈值掩模');
+        end
+    catch ME
+        warning('[run_firstlevel_glm] 读取/应用标准脑掩模失败，回退到强度阈值掩模: %s', ME.message);
+    end
+end
+
+if ~any(brainMask(:))
+    warning('[run_firstlevel_glm] 脑掩模为空，回退为强度阈值掩模');
+    brainMask = meanVol > thresh;
+end
 nVox = sum(brainMask(:));
 fprintf('[run_firstlevel_glm] 脑掩模体素数: %d / %d\n', nVox, nx*ny*nz);
 
@@ -134,4 +163,18 @@ end
 
 fprintf('[run_firstlevel_glm] === 一阶 GLM 分析完成 ===\n');
 fprintf('[run_firstlevel_glm] 输出目录: %s\n', outDir);
+end
+
+function V2 = resample_to_size(V, targetSize)
+[nx0, ny0, nz0] = size(V);
+tx = targetSize(1); ty = targetSize(2); tz = targetSize(3);
+if nx0 == tx && ny0 == ty && nz0 == tz
+    V2 = V;
+    return;
+end
+[Xt, Yt, Zt] = ndgrid(1:tx, 1:ty, 1:tz);
+Xs = (Xt - 1) * (nx0 - 1) / max(tx - 1, 1) + 1;
+Ys = (Yt - 1) * (ny0 - 1) / max(ty - 1, 1) + 1;
+Zs = (Zt - 1) * (nz0 - 1) / max(tz - 1, 1) + 1;
+V2 = reshape(trilinear_interp(V, [Xs(:)'; Ys(:)'; Zs(:)']), tx, ty, tz);
 end
