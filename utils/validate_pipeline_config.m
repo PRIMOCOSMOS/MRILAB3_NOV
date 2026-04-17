@@ -19,7 +19,7 @@ requiredTemplateFiles = {
 };
 for i = 1:numel(requiredTemplateFiles)
     if ~exist(requiredTemplateFiles{i}, 'file')
-        error('[validate_pipeline_config] 模板文件不存在，请在配置文件中填写正确绝对路径: %s', requiredTemplateFiles{i});
+        error('[validate_pipeline_config] 模板文件不存在, 请在配置文件中填写正确绝对路径: %s', requiredTemplateFiles{i});
     end
 end
 
@@ -46,8 +46,9 @@ if any(cfg.fwhm <= 0)
 end
 
 % -------- 权重长度（至少覆盖条件列）--------
-if numel(cfg.tcons.weight) < numel(cfg.cond.names)
-    error('[validate_pipeline_config] tcons.weight 长度(%d) < 条件数(%d)', ...
-        numel(cfg.tcons.weight), numel(cfg.cond.names));
+minWeightLen = numel(cfg.cond.names) + 6; % run_firstlevel_glm 默认拼接6列头动参数
+if numel(cfg.tcons.weight) < minWeightLen
+    error('[validate_pipeline_config] tcons.weight 长度(%d) < 最小要求(%d=条件列+6头动列)', ...
+        numel(cfg.tcons.weight), minWeightLen);
 end
 end

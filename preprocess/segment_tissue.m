@@ -21,9 +21,9 @@ function [gmFile, wmFile, csfFile] = segment_tissue(t1File, outDir, cfg)
 %              cfg.seg.mrfBeta  (MRF 正则化系数, 0=不使用)
 %
 % 输出:
-%   gmFile  - GM 概率图 NIfTI 路径
-%   wmFile  - WM 概率图 NIfTI 路径
-%   csfFile - CSF 概率图 NIfTI 路径
+%   gmFile  - GM 概率图 NIfTI 路径（c2_t1.nii）
+%   wmFile  - WM 概率图 NIfTI 路径（c3_t1.nii）
+%   csfFile - CSF 概率图 NIfTI 路径（c1_t1.nii）
 
 fprintf('[segment_tissue] 读取 T1: %s\n', t1File);
 [t1Data, hdr] = nifti_read(t1File);

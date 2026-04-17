@@ -104,7 +104,8 @@ cfg.dartel.svfIntegrationSteps = 6; % scaling&squaring 步数
 
 % ====== 标准化目标空间 ======
 % MNI 152 标准空间网格参数（2mm 各向同性）
-cfg.mni.origin  = [46 55 46];    % MNI 原点体素坐标（1-based，约为 [0,0,0] mm 位置）
+cfg.mni.origin  = [46 55 46];    % MNI 原点体素坐标（1-based, 按当前 dims 中心估计）
+                                 % 如使用其他 MNI 模板（如 y=64 版本），请按模板头信息调整
 cfg.mni.voxSize = [2 2 2];       % 体素尺寸 (mm)
 cfg.mni.dims    = [91 109 91];   % 图像维度
 
@@ -119,6 +120,6 @@ cfg.cond.durations = {[20 20 20 20],   [20 20 20 20]};   % 持续时间 (秒)
 
 % T-contrast: Task > Rest
 cfg.tcons.name   = 'Task_gt_Rest';
-cfg.tcons.weight = [1 -1 zeros(1, 6)];  % 2 条件 + 6 头动参数
+cfg.tcons.weight = [1 -1 zeros(1, 6)];  % 示例：前2列对应条件列，后续可按协变量列补零
 
 end

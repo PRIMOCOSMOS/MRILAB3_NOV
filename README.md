@@ -149,6 +149,6 @@ run_pipeline_sub01;
 
 ## 依赖
 
-- MATLAB R2018b 或更高版本
+- MATLAB R2018b 或更高版本（R2019a+ 会优先使用 writematrix 输出 rp 文件）
 - **无需** SPM / DPABI / FSL / FreeSurfer 等工具箱
 - 仅使用 MATLAB 内置函数（dicominfo, fft, conv, gradient 等）

@@ -1,5 +1,5 @@
 function render_activation_3d(tMapFile, brainTemplateFile, outDir, visCfg)
-% render_activation_3d - 交互式3D激活渲染（替代 SPM Renderer 的现代化展示）
+% render_activation_3d - 交互式3D激活渲染 (替代 SPM Renderer 的现代化展示)
 % 输入:
 %   tMapFile         - T统计图 NIfTI（如 spmT_*.nii）
 %   brainTemplateFile- 标准脑模板 NIfTI（如 MNI152_T1_2mm）
