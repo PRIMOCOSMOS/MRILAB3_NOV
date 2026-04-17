@@ -13,12 +13,13 @@ function run_pipeline_sub01()
 %   Step 03: 切片时序校正（Slice Timing Correction）
 %   Step 04: 头动校正（Realign: Estimate + Reslice）
 %   Step 05: 重定位（Reorient: 坐标原点平移至 AC）
-%   Step 06: T1 配准到功能像空间（Coreg T1 to Fun）
-%   Step 07: T1 组织分割（GM/WM/CSF 概率图）
-%   Step 08: 非线性配准（DARTEL 替代实现: SVF 速度场）
-%   Step 09: 空间标准化（Normalize: 应用形变场到 MNI）
-%   Step 10: 空间平滑（Smooth: 3D Gaussian）
-%   Step 11: 一阶 GLM（设计矩阵 + OLS 估计 + T-contrast）
+%   Step 06: T1 脑提取（BET）
+%   Step 07: T1 配准到功能像空间（Coreg T1 to Fun）
+%   Step 08: T1 组织分割（GM/WM/CSF 概率图）
+%   Step 09: 非线性配准（DARTEL 替代实现: SVF 速度场）
+%   Step 10: 空间标准化（Normalize: 应用形变场到 MNI）
+%   Step 11: 空间平滑（Smooth: 3D Gaussian）
+%   Step 12: 一阶 GLM（设计矩阵 + OLS 估计 + T-contrast）
 %
 % 目录风格（参考 DPABI）:
 %   FunImg      - 原始 NIfTI 功能像
@@ -27,6 +28,7 @@ function run_pipeline_sub01()
 %   FunImgARW   - 空间标准化后（W=warped to MNI）
 %   FunImgARWS  - 平滑后（S=smoothed）
 %   T1Img            - 原始 T1
+%   T1ImgBet         - BET 后的 T1（bet_*.nii）
 %   T1ImgCoreg       - 配准到 Fun 空间后的 T1
 %   T1ImgNewSegment  - 组织分割结果（GM/WM/CSF）
 %   RealignParameter - 头动参数 rp_*.txt
@@ -55,7 +57,7 @@ pipelineDir = fileparts(mfilename('fullpath'));
 addpath(fullfile(pipelineDir, 'utils'));
 addpath(fullfile(pipelineDir, 'io'));
 addpath(fullfile(pipelineDir, 'preprocess'));
-addpath(fullfile(pipelineDir, 'register'));
+% register 模块函数已并入 preprocess（例如 coreg_t1_to_fun）
 addpath(fullfile(pipelineDir, 'stats'));
 addpath(fullfile(pipelineDir, 'visualize'));
 
@@ -175,25 +177,41 @@ write_log(logFile, sprintf('  Fun Reoriented: %s', funNii_Ro));
 write_log(logFile, sprintf('  T1 Reoriented:  %s', t1Nii_Ro));
 
 % ======================================================================
-% Step 06: T1 配准到功能像（Coreg T1 → Fun）
+% Step 06: T1 脑提取（BET）
 % ======================================================================
-write_log(logFile, 'Step06: T1 Coreg to Fun');
-fprintf('\n--- Step 06: Coreg T1 → Fun ---\n');
+write_log(logFile, 'Step06: T1 BET');
+fprintf('\n--- Step 06: BET T1 ---\n');
 
 [~, t1Base_Ro] = fileparts(t1Nii_Ro);
+t1Nii_Bet = fullfile(cfg.t1ImgBetDir, ['bet_' t1Base_Ro '.nii']);
+t1Mask_Bet = fullfile(cfg.t1ImgBetDir, ['betmask_' t1Base_Ro '.nii']);
+if ~exist(t1Nii_Bet, 'file')
+    [t1Nii_Bet, t1Mask_Bet] = brain_extract_t1(t1Nii_Ro, cfg.t1ImgBetDir, cfg);
+else
+    write_log(logFile, '  已存在，跳过');
+end
+write_log(logFile, sprintf('  T1 BET: %s', t1Nii_Bet));
+write_log(logFile, sprintf('  BET Mask: %s', t1Mask_Bet));
+
+% ======================================================================
+% Step 07: T1 配准到功能像（Coreg T1 → Fun）
+% ======================================================================
+write_log(logFile, 'Step07: T1 Coreg to Fun');
+fprintf('\n--- Step 07: Coreg T1 → Fun ---\n');
+
 t1Nii_Coreg = fullfile(cfg.t1ImgCoregDir, ['coreg_' t1Base_Ro '.nii']);
 if ~exist(t1Nii_Coreg, 'file')
-    [t1Nii_Coreg, ~] = coreg_t1_to_fun(t1Nii_Ro, funNii_Ro, cfg.t1ImgCoregDir);
+    [t1Nii_Coreg, ~] = coreg_t1_to_fun(t1Nii_Bet, funNii_Ro, cfg.t1ImgCoregDir);
 else
     write_log(logFile, '  已存在，跳过');
 end
 write_log(logFile, sprintf('  T1 Coreg: %s', t1Nii_Coreg));
 
 % ======================================================================
-% Step 07: 组织分割（New Segment: GM/WM/CSF）
+% Step 08: 组织分割（New Segment: GM/WM/CSF）
 % ======================================================================
-write_log(logFile, 'Step07: T1 组织分割（GMM）');
-fprintf('\n--- Step 07: Segment ---\n');
+write_log(logFile, 'Step08: T1 组织分割（GMM）');
+fprintf('\n--- Step 08: Segment ---\n');
 
 gmFile  = fullfile(cfg.t1SegDir, 'c2_t1.nii');  % GM: c2
 wmFile  = fullfile(cfg.t1SegDir, 'c3_t1.nii');  % WM: c3
@@ -208,10 +226,10 @@ write_log(logFile, sprintf('  GM: %s', gmFile));
 write_log(logFile, sprintf('  WM: %s', wmFile));
 
 % ======================================================================
-% Step 08: 非线性配准（DARTEL 替代：SVF 速度场）
+% Step 09: 非线性配准（DARTEL 替代：SVF 速度场）
 % ======================================================================
-write_log(logFile, 'Step08: DARTEL 非线性配准');
-fprintf('\n--- Step 08: DARTEL-like Warp ---\n');
+write_log(logFile, 'Step09: DARTEL 非线性配准');
+fprintf('\n--- Step 09: DARTEL-like Warp ---\n');
 
 flowFile = fullfile(cfg.t1SegDir, 'u_rc1_Template.nii');
 if ~exist(flowFile, 'file')
@@ -222,25 +240,25 @@ end
 write_log(logFile, sprintf('  流场: %s', flowFile));
 
 % ======================================================================
-% Step 09: 空间标准化（Normalize: Fun → MNI）
+% Step 10: 空间标准化（Normalize: Fun → MNI）
 % ======================================================================
-write_log(logFile, 'Step09: Normalize（功能像 → MNI 空间）');
-fprintf('\n--- Step 09: Normalize ---\n');
+write_log(logFile, 'Step10: Normalize（功能像 → MNI 空间）');
+fprintf('\n--- Step 10: Normalize ---\n');
 
 [~, funBase_Ro] = fileparts(funNii_Ro);
 funNii_W = fullfile(cfg.funImgARWDir, ['w' funBase_Ro '.nii']);
 if ~exist(funNii_W, 'file')
-    funNii_W = normalize_apply(funNii_Ro, flowFile, cfg.funImgARWDir, cfg.mni);
+    funNii_W = normalize_apply(funNii_Ro, flowFile, cfg.funImgARWDir, cfg.normalize);
 else
     write_log(logFile, '  已存在，跳过');
 end
 write_log(logFile, sprintf('  标准化输出: %s', funNii_W));
 
 % ======================================================================
-% Step 10: 空间平滑（Smooth: 3D Gaussian）
+% Step 11: 空间平滑（Smooth: 3D Gaussian）
 % ======================================================================
-write_log(logFile, sprintf('Step10: Smooth FWHM=[%.1f %.1f %.1f]mm', cfg.fwhm));
-fprintf('\n--- Step 10: Smooth ---\n');
+write_log(logFile, sprintf('Step11: Smooth FWHM=[%.1f %.1f %.1f]mm', cfg.fwhm));
+fprintf('\n--- Step 11: Smooth ---\n');
 
 [~, funBase_W] = fileparts(funNii_W);
 funNii_S = fullfile(cfg.funImgARWSDir, ['s' funBase_W '.nii']);
@@ -252,10 +270,10 @@ end
 write_log(logFile, sprintf('  平滑输出: %s', funNii_S));
 
 % ======================================================================
-% Step 11: 一阶 GLM（Specify + Estimate + T-contrast）
+% Step 12: 一阶 GLM（Specify + Estimate + T-contrast）
 % ======================================================================
-write_log(logFile, 'Step11: 一阶 GLM');
-fprintf('\n--- Step 11: 1st-level GLM ---\n');
+write_log(logFile, 'Step12: 一阶 GLM');
+fprintf('\n--- Step 12: 1st-level GLM ---\n');
 
 spmMat = fullfile(cfg.firstLevelDir, 'SPM.mat');
 if ~exist(spmMat, 'file')
