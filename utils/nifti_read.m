@@ -260,15 +260,18 @@ dy = double(hdr.pixdim(3));
 dz = double(hdr.pixdim(4));
 
 % 从 Analyze 7.5 头文件的字节 252 读取 orient 和 originator
+% 注意：fseek 使用 0-based 字节偏移：
+%   字节 252 = hist.orient（1 byte uint8，方位代码）
+%   字节 253 起 = hist.originator（5 x int16，10 bytes，前3个为 x/y/z 原点）
 fid = fopen(hdrFile, 'rb', byteOrder);
 if fid == -1
     warning('[nifti_read] 无法读取 Analyze originator，使用像素对角仿射');
     affine = diag([dx dy dz 1]);
     return;
 end
-fseek(fid, 252, 'bof');
-orient     = fread(fid, 1, 'uint8');      % 1 byte: hist.orient
-originator = fread(fid, 5, 'int16');      % 10 bytes: hist.originator[0..4]
+fseek(fid, 252, 'bof');           % 0-based offset: byte 252 = hist.orient
+orient     = fread(fid, 1, 'uint8');      % hist.orient (byte 252)
+originator = fread(fid, 5, 'int16');      % hist.originator[0..4] (bytes 253-262)
 fclose(fid);
 
 ox = double(originator(1));  % x 原点（1-based 体素坐标）
