@@ -57,6 +57,7 @@ pipelineDir = fileparts(mfilename('fullpath'));
 addpath(fullfile(pipelineDir, 'utils'));
 addpath(fullfile(pipelineDir, 'io'));
 addpath(fullfile(pipelineDir, 'preprocess'));
+% register 模块函数已并入 preprocess（例如 coreg_t1_to_fun）
 addpath(fullfile(pipelineDir, 'stats'));
 addpath(fullfile(pipelineDir, 'visualize'));
 

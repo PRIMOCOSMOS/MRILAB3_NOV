@@ -27,7 +27,7 @@ mask = vol > thr;
 % 可选：平滑掩模边界（尽量不依赖额外工具箱）
 if isfield(cfg, 'bet') && isfield(cfg.bet, 'smoothSigma') && cfg.bet.smoothSigma > 0
     try
-        % 取约 ±2σ 的奇数长度核（最小 3），兼顾平滑效果与计算量
+        % 取约 ±2σ 范围的奇数长度核（2*ceil(2σ)+1，最小 3），兼顾平滑效果与计算量
         ksz = max(3, 2*ceil(2*cfg.bet.smoothSigma)+1);
         x = -(ksz-1)/2:(ksz-1)/2;
         g = exp(-(x.^2)/(2*cfg.bet.smoothSigma^2));
