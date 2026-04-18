@@ -41,7 +41,7 @@ if nd ~= 3
     error('[normalize_apply] 位移场第4维应为3（x/y/z方向）');
 end
 if ~isfield(flowHdr, 'affine') || any(~isfinite(flowHdr.affine(:)))
-    error('[normalize_apply] 位移场缺少有效 affine，无法建立模板坐标系');
+    error('[normalize_apply] 位移场缺少有效 affine，无法建立模板坐标系。请重新运行 dartel_warp.m 生成位移场文件: %s', flowFile);
 end
 if isfield(flowHdr, 'nx') && isfield(flowHdr, 'ny') && isfield(flowHdr, 'nz')
     if any([flowHdr.nx, flowHdr.ny, flowHdr.nz] ~= [nx_f, ny_f, nz_f])

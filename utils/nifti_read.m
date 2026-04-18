@@ -263,7 +263,7 @@ dy = double(hdr.pixdim(3));
 dz = double(hdr.pixdim(4));
 
 % 从 Analyze 7.5 头文件读取 orient 和 originator
-ANALYZE_ORIENT_OFFSET = 252; % 0-based 偏移，指向 hist.orient
+ANALYZE_ORIENT_OFFSET = 252; % 0-based 文件字节偏移（hist.orient 字段起始于 byte 252）
 % 注意：fseek 使用 0-based 字节偏移：
 %   字节 252 = hist.orient（1 byte uint8，方位代码）
 %   字节 253 起 = hist.originator（5 x int16，10 bytes，前3个为 x/y/z 原点）
@@ -290,7 +290,9 @@ if ox == 0 && oy == 0 && oz == 0
 end
 
 % SPM Analyze 7.5 横断位（orient=0）默认 LAS 坐标系：x 轴取反
-% 原点体素 (ox,oy,oz) 对应世界坐标 (0,0,0)
+% 原点体素 (ox,oy,oz) 对应世界坐标 (0,0,0)。
+% 这里使用 (oy-1)/(oz-1) 是因为仿射矩阵按 0-based 体素索引建模：
+% 当 1-based 体素索引转为 0-based 后，位移应减去 1 个体素。
 affine = [-dx  0   0   dx*ox;
            0  dy   0  -dy*(oy-1);
            0   0  dz  -dz*(oz-1);

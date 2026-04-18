@@ -21,6 +21,9 @@ if isfield(cfg, 'installPaths')
     end
 end
 spmRoots = unique(nonempty([{spmRoot}, spmFallbackRoots]), 'stable');
+if isempty(spmRoots)
+    warning('[resolve_pipeline_template_paths] 未配置可用 SPM 根目录，模板推断将仅使用 DPABI 路径');
+end
 
 % ---- DARTEL 模板（4D）----
 dartelCandidates = unique(nonempty([ ...

@@ -25,7 +25,7 @@ steps = { ...
 
 pass = true;
 lines = {};
-lines{end+1} = sprintf('[audit] 时间: %s', datestr(now)); %#ok<AGROW>
+lines{end+1} = sprintf('[audit] 时间: %s', char(datetime('now','Format','yyyy-MM-dd HH:mm:ss'))); %#ok<AGROW>
 lines{end+1} = '[audit] 对照来源: SPM25 + DPABI'; %#ok<AGROW>
 lines{end+1} = '';
 
