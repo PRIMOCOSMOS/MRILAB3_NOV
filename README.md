@@ -75,15 +75,15 @@ cfg.cond.durations = {30*ones(1,5),        30*ones(1,5)};
 
 ```matlab
 cfg.installPaths.dpabiRoot = 'D:\DPABI_V9.0_250415';
-cfg.installPaths.spmRoot   = 'D:\spm25';              % 优先 SPM25
-cfg.installPaths.spmFallbackRoots = {'D:\spm'};       % 可选回退
+cfg.installPaths.spmRoot   = 'D:\spm';                % 优先 SPM25
+cfg.installPaths.spmFallbackRoots = {'D:\spm25'};     % 可选回退
 
-cfg.templates.dartel.template4DNii = 'D:\spm25\toolbox\DARTEL\Template_6_IXI555_MNI152.nii';
+cfg.templates.dartel.template4DNii = 'D:\spm\toolbox\DARTEL\Template_6_IXI555_MNI152.nii'; % 若不存在将自动回退 Template_6.nii 或 tpm/TPM.nii
 cfg.templates.dartel.gmVolumeIndex = 1; % 第1帧=GM
 cfg.templates.dartel.wmVolumeIndex = 2; % 第2帧=WM
 cfg.templates.standard.brainMaskNii = 'D:\DPABI_V9.0_250415\Templates\BrainMask_05_91x109x91.hdr'; % Analyze(.hdr/.img)
 cfg.templates.standard.t1TemplateNii = 'D:\DPABI_V9.0_250415\Templates\ch2.nii';
-cfg.visualization.spmRenderTemplateMat = 'D:\spm25\rend\render_single_subj.mat'; % 仅参考SPM渲染逻辑
+cfg.visualization.spmRenderTemplateMat = 'D:\spm\rend\render_single_subj.mat'; % 仅参考SPM渲染逻辑
 cfg.visualization.brainTemplateNii = cfg.templates.standard.t1TemplateNii;
 ```
 
