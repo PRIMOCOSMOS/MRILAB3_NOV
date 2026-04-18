@@ -40,6 +40,15 @@ fprintf('[normalize_apply] 读取位移场: %s\n', flowFile);
 if nd ~= 3
     error('[normalize_apply] 位移场第4维应为3（x/y/z方向）');
 end
+if ~isfield(flowHdr, 'affine') || any(~isfinite(flowHdr.affine(:)))
+    error('[normalize_apply] 位移场缺少有效 affine，无法建立模板坐标系');
+end
+if isfield(flowHdr, 'nx') && isfield(flowHdr, 'ny') && isfield(flowHdr, 'nz')
+    if any([flowHdr.nx, flowHdr.ny, flowHdr.nz] ~= [nx_f, ny_f, nz_f])
+        warning('[normalize_apply] flow header 维度与数据维度不一致，使用数据维度继续: hdr=[%d %d %d], data=[%d %d %d]', ...
+            flowHdr.nx, flowHdr.ny, flowHdr.nz, nx_f, ny_f, nz_f);
+    end
+end
 
 % -------- MNI 目标网格参数 --------
 [mni_dims, mni_vox, mni_origin] = parse_target_grid(mniCfg);

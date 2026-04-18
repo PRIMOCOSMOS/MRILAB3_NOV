@@ -66,7 +66,7 @@ cfg.installPaths.spmFallbackRoots = {'D:\spm'};       % 兼容旧安装路径
 %     A) 4D 单文件（推荐）: template4DNii + gmVolumeIndex + wmVolumeIndex
 %        第1帧=GM，第2帧=WM（与 DARTEL 惯例一致）
 %     B) 双文件: gmTemplateNii + wmTemplateNii
-cfg.templates.dartel.template4DNii = 'D:\spm25\toolbox\DARTEL\Template_6_IXI555_MNI152.nii';
+cfg.templates.dartel.template4DNii = fullfile(cfg.installPaths.spmRoot, 'toolbox', 'DARTEL', 'Template_6_IXI555_MNI152.nii');
 cfg.templates.dartel.gmVolumeIndex = 1;   % 4D模板中 GM 所在帧（通常为第1帧）
 cfg.templates.dartel.wmVolumeIndex = 2;   % 4D模板中 WM 所在帧（通常为第2帧）
 %
@@ -74,16 +74,16 @@ cfg.templates.dartel.wmVolumeIndex = 2;   % 4D模板中 WM 所在帧（通常为
 %   来自 DPABI/Templates/ 目录，仅有 .hdr/.img 格式（无 .nii）
 %   pipeline 的 nifti_read 已支持 Analyze 7.5 格式读取。
 %   仿射矩阵自动从 .mat sidecar（如存在）或头中的 originator 字段解析。
-cfg.templates.standard.brainMaskNii = 'D:\DPABI_V9.0_250415\Templates\BrainMask_05_91x109x91.hdr';
+cfg.templates.standard.brainMaskNii = fullfile(cfg.installPaths.dpabiRoot, 'Templates', 'BrainMask_05_91x109x91.hdr');
 %
 % ── T1 可视化模板 ───────────────────────────────────────────────────
 %   来自 DPABI/Templates/ch2.nii（Colin Holmes T1 MNI 标准脑，非 ch2bet）
 %   DPARSFA_run.m 第 3255 行: Ch2Filename = fullfile(TemplatePath,'ch2.nii')
-cfg.templates.standard.t1TemplateNii = 'D:\DPABI_V9.0_250415\Templates\ch2.nii';
+cfg.templates.standard.t1TemplateNii = fullfile(cfg.installPaths.dpabiRoot, 'Templates', 'ch2.nii');
 
 % SPM 经典 Renderer 的 rend 模板（.mat）；用于记录参考逻辑
 % 现代化 3D 渲染可不直接使用该文件，但可用于检查与兼容
-cfg.visualization.spmRenderTemplateMat = 'D:\spm25\rend\render_single_subj.mat';
+cfg.visualization.spmRenderTemplateMat = fullfile(cfg.installPaths.spmRoot, 'rend', 'render_single_subj.mat');
 
 % Renderer（交互式3D显示）所需模板
 cfg.visualization.enable = true;                     % 是否在1st-level后自动出3D交互图

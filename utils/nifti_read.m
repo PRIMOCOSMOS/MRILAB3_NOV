@@ -110,10 +110,13 @@ hdr.magic         = deblank(fread(fid, 4, '*char')');   % 4
 fclose(fid);
 
 % -------- 检测文件格式（NIfTI-1 vs Analyze 7.5）--------
+% NIfTI-1 magic 常量
+NIFTI1_MAGIC_DUAL   = 'ni1';  % .hdr/.img
+NIFTI1_MAGIC_SINGLE = 'n+1';  % .nii
 % NIfTI-1 的 magic 字段为 "ni1"（hdr/img 双文件）或 "n+1"（.nii 单文件）
 % Analyze 7.5 的 magic 字段不符合上述规则
 isNifti1 = (numel(hdr.magic) >= 3) && ...
-           (strncmpi(hdr.magic, 'ni1', 3) || strncmpi(hdr.magic, 'n+1', 3));
+           (strncmpi(hdr.magic, NIFTI1_MAGIC_DUAL, 3) || strncmpi(hdr.magic, NIFTI1_MAGIC_SINGLE, 3));
 
 % -------- 构建仿射矩阵 --------
 if isNifti1
@@ -259,7 +262,8 @@ dx = double(hdr.pixdim(2));
 dy = double(hdr.pixdim(3));
 dz = double(hdr.pixdim(4));
 
-% 从 Analyze 7.5 头文件的字节 252 读取 orient 和 originator
+% 从 Analyze 7.5 头文件读取 orient 和 originator
+ANALYZE_ORIENT_OFFSET = 252; % 0-based 偏移，指向 hist.orient
 % 注意：fseek 使用 0-based 字节偏移：
 %   字节 252 = hist.orient（1 byte uint8，方位代码）
 %   字节 253 起 = hist.originator（5 x int16，10 bytes，前3个为 x/y/z 原点）
@@ -269,7 +273,7 @@ if fid == -1
     affine = diag([dx dy dz 1]);
     return;
 end
-fseek(fid, 252, 'bof');           % 0-based offset: byte 252 = hist.orient
+fseek(fid, ANALYZE_ORIENT_OFFSET, 'bof');
 orient     = fread(fid, 1, 'uint8');      % hist.orient (byte 252)
 originator = fread(fid, 5, 'int16');      % hist.originator[0..4] (bytes 253-262)
 fclose(fid);
