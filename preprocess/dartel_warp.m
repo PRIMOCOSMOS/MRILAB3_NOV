@@ -33,7 +33,7 @@ fprintf('[dartel_warp] WM: %s\n', wmFile);
 
 % -------- 读取概率图 --------
 [gmData, gmHdr] = nifti_read(gmFile);
-[wmData, ~]     = nifti_read(wmFile);
+[wmData, wmHdr] = nifti_read(wmFile);
 
 gm = double(gmData(:,:,:,1));
 wm = double(wmData(:,:,:,1));
@@ -44,11 +44,21 @@ nIter   = cfg.dartel.nIter;
 reg     = cfg.dartel.reg;
 
 % -------- 加载真实模板（东亚模板或用户提供模板）--------
-[template_gm, template_wm] = load_dartel_templates(cfg, [nx ny nz]);
+% 返回模板原始数据及其仿射矩阵，不再强制重采样到个体尺寸
+[template_gm, template_wm, tmplHdr] = load_dartel_templates(cfg);
+[tnx, tny, tnz] = size(template_gm);
+fprintf('[dartel_warp] 模板尺寸: [%d %d %d]\n', tnx, tny, tnz);
 
-% -------- 初始化速度场 --------
-% 速度场 v: [nx ny nz 3]，单位为体素位移
-v = zeros(nx, ny, nz, 3);
+% -------- 将个体 GM/WM 重采样到模板坐标空间 --------
+% 使用仿射矩阵正确对齐坐标系（而非仅匹配像素数量）
+% 此步骤等价于 SPM New Segment 将组织概率图输出到 MNI 空间后再进行 DARTEL 优化
+fprintf('[dartel_warp] 将个体 GM/WM 重采样到模板空间...\n');
+gm_in_tmpl = resample_vol_affine(gm, gmHdr.affine, tmplHdr.affine, [tnx tny tnz]);
+wm_in_tmpl = resample_vol_affine(wm, wmHdr.affine, tmplHdr.affine, [tnx tny tnz]);
+
+% -------- 初始化速度场（在模板空间定义）--------
+% 速度场 v: [tnx tny tnz 3]，各分量单位为模板体素位移
+v = zeros(tnx, tny, tnz, 3);
 
 % -------- 多分辨率配准 --------
 ensure_dir(outDir);
@@ -58,9 +68,9 @@ for lev = 1:nLevels
 
     fprintf('[dartel_warp] 分辨率层 %d/%d (缩放1/%d)\n', lev, nLevels, scale);
 
-    % 下采样源图和模板
-    gm_s  = downsample_vol(gm,          scale);
-    wm_s  = downsample_vol(wm,          scale);
+    % 下采样模板空间的源图和模板（均在同一坐标系下）
+    gm_s  = downsample_vol(gm_in_tmpl,  scale);
+    wm_s  = downsample_vol(wm_in_tmpl,  scale);
     tgm_s = downsample_vol(template_gm, scale);
     twm_s = downsample_vol(template_wm, scale);
     v_s   = downsample_flow(v, scale);
@@ -100,33 +110,38 @@ for lev = 1:nLevels
         v_s = v_s - lr * dv;
     end
 
-    % 上采样速度场回原分辨率
-    if lev < nLevels
-        v = upsample_flow(v_s, scale, [nx ny nz]);
-    else
-        v = upsample_flow(v_s, scale, [nx ny nz]);
-    end
+    % 上采样速度场回模板完整分辨率
+    v = upsample_flow(v_s, scale, [tnx tny tnz]);
 
-    mse = mean((gm_s - tgm_s).^2) + mean((wm_s - twm_s).^2);
+    mse = mean((gm_s - tgm_s).^2, 'all') + mean((wm_s - twm_s).^2, 'all');
     fprintf('[dartel_warp]   层%d 完成, MSE=%.6f\n', lev, mse);
 end
 
 % -------- 最终位移场 --------
-dispFinal = integrate_svf(v, 6);  % [nx ny nz 3]
+dispFinal = integrate_svf(v, 6);  % [tnx tny tnz 3]
 
 % -------- 写出位移场（4D NIfTI，第4维=3个方向）--------
-flowHdr = gmHdr;
-flowHdr.dim = int16([4, nx, ny, nz, 3, 1, 1, 1]);
+% 关键：使用模板的仿射矩阵作为位移场的空间头信息，
+% 这样 normalize_apply 可以通过读取该头信息得知模板坐标系，
+% 从而正确地将 MNI 世界坐标映射到模板体素坐标，再经位移场找到个体体素。
+flowHdr = tmplHdr;
+flowHdr.dim = int16([4, tnx, tny, tnz, 3, 1, 1, 1]);
 flowHdr.nt  = 3;
+flowHdr.nx  = tnx; flowHdr.ny = tny; flowHdr.nz = tnz;
+flowHdr.datatype = 16;  % float32
 flowHdr.descrip = 'DARTELflow_SVF';
 
 flowFile = fullfile(outDir, 'u_rc1_Template.nii');
 nifti_write(flowFile, single(dispFinal), flowHdr);
-fprintf('[dartel_warp] 位移场已写出: %s\n', flowFile);
+fprintf('[dartel_warp] 位移场已写出: %s  [%d %d %d 3]\n', flowFile, tnx, tny, tnz);
 
-% -------- 输出形变后的 GM --------
-gm_warped_final = warp_volume(gm, dispFinal);
-warpedHdr = gmHdr;
+% -------- 输出形变后的 GM（在模板空间中验证配准质量）--------
+gm_warped_final = warp_volume(gm_in_tmpl, dispFinal);
+warpedHdr = tmplHdr;
+warpedHdr.nt  = 1;
+warpedHdr.nx  = tnx; warpedHdr.ny = tny; warpedHdr.nz = tnz;
+warpedHdr.dim = int16([3, tnx, tny, tnz, 1, 1, 1, 1]);
+warpedHdr.datatype = 16;
 warpedHdr.descrip = 'DARTEL_warped_GM';
 warpedFile = fullfile(outDir, 'warped_gm.nii');
 nifti_write(warpedFile, single(gm_warped_final), warpedHdr);
@@ -236,22 +251,11 @@ L(:,:,2:end)   = L(:,:,2:end)   + V(:,:,1:end-1);
 L(:,:,1:end-1) = L(:,:,1:end-1) + V(:,:,2:end);
 end
 
-function V2 = resample_vol_to_size(V, targetSize)
-% 三线性重采样到目标尺寸（仅尺寸匹配，不改变强度统计趋势）
-[nx, ny, nz] = size(V);
-tx = targetSize(1); ty = targetSize(2); tz = targetSize(3);
-if nx == tx && ny == ty && nz == tz
-    V2 = V;
-    return;
-end
-[Xt, Yt, Zt] = ndgrid(1:tx, 1:ty, 1:tz);
-Xs = (Xt - 1) * (nx - 1) / max(tx - 1, 1) + 1;
-Ys = (Yt - 1) * (ny - 1) / max(ty - 1, 1) + 1;
-Zs = (Zt - 1) * (nz - 1) / max(tz - 1, 1) + 1;
-V2 = reshape(trilinear_interp(V, [Xs(:)'; Ys(:)'; Zs(:)']), tx, ty, tz);
-end
 
-function [template_gm, template_wm] = load_dartel_templates(cfg, targetSize)
+function [template_gm, template_wm, tmplHdr] = load_dartel_templates(cfg)
+% load_dartel_templates - 加载 DARTEL 模板并返回原始数据及其仿射矩阵
+% 支持两种配置方式：4D 单文件模板 或 GM/WM 双文件模板
+% 不再对模板进行尺寸重采样；由调用方负责将个体图像重采样到模板空间
 if ~isfield(cfg, 'templates') || ~isfield(cfg.templates, 'dartel')
     error('[dartel_warp] 缺少 cfg.templates.dartel 配置');
 end
@@ -280,15 +284,15 @@ if has4DTemplate
         error('[dartel_warp] gmVolumeIndex 与 wmVolumeIndex 不能相同');
     end
 
-    [template4D, ~] = nifti_read(template4DFile);
+    [template4D, tmplHdr] = nifti_read(template4DFile);
     nVols = size(template4D, 4);
     if gmIdx > nVols || wmIdx > nVols
         error('[dartel_warp] 4D模板帧数不足: 需要 GM=%d WM=%d, 实际=%d', gmIdx, wmIdx, nVols);
     end
 
     fprintf('[dartel_warp] 使用4D模板: %s (GM=%d, WM=%d)\n', template4DFile, gmIdx, wmIdx);
-    template_gm = resample_vol_to_size(double(template4D(:,:,:,gmIdx)), targetSize);
-    template_wm = resample_vol_to_size(double(template4D(:,:,:,wmIdx)), targetSize);
+    template_gm = double(template4D(:,:,:,gmIdx));
+    template_wm = double(template4D(:,:,:,wmIdx));
     return;
 end
 
@@ -302,8 +306,8 @@ if ~exist(gmTemplateFile, 'file') || ~exist(wmTemplateFile, 'file')
     error('[dartel_warp] 模板文件不存在，请检查配置: GM=%s WM=%s', gmTemplateFile, wmTemplateFile);
 end
 fprintf('[dartel_warp] 使用双文件模板: GM=%s, WM=%s\n', gmTemplateFile, wmTemplateFile);
-[template_gm_raw, ~] = nifti_read(gmTemplateFile);
-[template_wm_raw, ~] = nifti_read(wmTemplateFile);
-template_gm = resample_vol_to_size(double(template_gm_raw(:,:,:,1)), targetSize);
-template_wm = resample_vol_to_size(double(template_wm_raw(:,:,:,1)), targetSize);
+[template_gm_raw, tmplHdr] = nifti_read(gmTemplateFile);
+[template_wm_raw, ~]       = nifti_read(wmTemplateFile);
+template_gm = double(template_gm_raw(:,:,:,1));
+template_wm = double(template_wm_raw(:,:,:,1));
 end

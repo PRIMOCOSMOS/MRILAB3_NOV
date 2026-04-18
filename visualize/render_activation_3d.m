@@ -13,14 +13,27 @@ if ~exist(brainTemplateFile, 'file')
     error('[render_activation_3d] 脑模板不存在: %s', brainTemplateFile);
 end
 
-[tData, ~] = nifti_read(tMapFile);
-[brainData, ~] = nifti_read(brainTemplateFile);
-tMap = double(tData(:,:,:,1));
-brain = double(brainData(:,:,:,1));
+% SPM Renderer 逻辑解析（仅做兼容记录）:
+% spm_render(dat, brt, rendfile) 的 rendfile 常为 rend/render_single_subj.mat，
+% 内含多视角投影所需的渲染矩阵与深度图（不是可直接旋转的3D网格）。
+% 本函数采用现代化交互3D（isosurface + rotate3d），因此不直接依赖该 .mat，
+% 但如果配置了该文件会进行存在性检查并输出提示，便于追踪与开源逻辑对齐。
+if isfield(visCfg, 'spmRenderTemplateMat') && ~isempty(visCfg.spmRenderTemplateMat)
+    if exist(visCfg.spmRenderTemplateMat, 'file')
+        fprintf('[render_activation_3d] 检测到 SPM Renderer 模板: %s\n', visCfg.spmRenderTemplateMat);
+    else
+        warning('[render_activation_3d] 配置了 SPM Renderer 模板但文件不存在: %s', visCfg.spmRenderTemplateMat);
+    end
+end
 
-% 尺寸对齐（若尺寸不同，将统计图重采样到模板空间）
+[tData, tHdr]     = nifti_read(tMapFile);
+[brainData, brainHdr] = nifti_read(brainTemplateFile);
+tMap   = double(tData(:,:,:,1));
+brain  = double(brainData(:,:,:,1));
+
+% 若尺寸不同，使用仿射矩阵对齐重采样，将统计图重采样到脑模板空间
 if any(size(tMap) ~= size(brain))
-    tMap = resample_to_size(tMap, size(brain));
+    tMap = resample_vol_affine(tMap, tHdr.affine, brainHdr.affine, size(brain));
 end
 
 tThr = visCfg.tThreshold;
@@ -76,14 +89,4 @@ if isfield(visCfg, 'outputPng') && visCfg.outputPng
     exportgraphics(fig, outPng, 'Resolution', 200);
     fprintf('[render_activation_3d] 已导出截图: %s\n', outPng);
 end
-end
-
-function V2 = resample_to_size(V, targetSize)
-[nx, ny, nz] = size(V);
-tx = targetSize(1); ty = targetSize(2); tz = targetSize(3);
-[Xt, Yt, Zt] = ndgrid(1:tx, 1:ty, 1:tz);
-Xs = (Xt - 1) * (nx - 1) / max(tx - 1, 1) + 1;
-Ys = (Yt - 1) * (ny - 1) / max(ty - 1, 1) + 1;
-Zs = (Zt - 1) * (nz - 1) / max(tz - 1, 1) + 1;
-V2 = reshape(trilinear_interp(V, [Xs(:)'; Ys(:)'; Zs(:)']), tx, ty, tz);
 end

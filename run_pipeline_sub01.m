@@ -64,6 +64,9 @@ addpath(fullfile(pipelineDir, 'visualize'));
 % -------- 载入配置 --------
 cfg = config_sub01();
 
+% -------- 按 DPABI/SPM 安装目录自动推断模板路径 --------
+cfg = resolve_pipeline_template_paths(cfg);
+
 % -------- 开箱即用配置校验（失败即退出）--------
 validate_pipeline_config(cfg);
 
@@ -77,6 +80,11 @@ end
 logFile = fullfile(cfg.logDir, sprintf('pipeline_%s.log', datestr(now,'yyyymmdd_HHMMSS')));
 write_log(logFile, '=== Pipeline 开始 ===');
 write_log(logFile, sprintf('被试: %s', cfg.subID));
+
+% -------- 逻辑一致性审计（对照 SPM25/DPABI 关键流程）--------
+auditFile = fullfile(cfg.logDir, sprintf('parity_audit_%s.txt', datestr(now,'yyyymmdd_HHMMSS')));
+audit = audit_pipeline_parity(cfg, pipelineDir, auditFile);
+write_log(logFile, sprintf('ParityAudit: %s (pass=%d)', audit.reportFile, audit.pass));
 
 % ======================================================================
 % Step 01: DICOM → NIfTI

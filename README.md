@@ -74,18 +74,24 @@ cfg.cond.durations = {30*ones(1,5),        30*ones(1,5)};
 还需配置模板绝对路径（必须）：
 
 ```matlab
-cfg.templates.dartel.template4DNii = 'D:\DPABI_V9.0_250415\Templates\Template_6_EastAsian.nii';
+cfg.installPaths.dpabiRoot = 'D:\DPABI_V9.0_250415';
+cfg.installPaths.spmRoot   = 'D:\spm25';              % 优先 SPM25
+cfg.installPaths.spmFallbackRoots = {'D:\spm'};       % 可选回退
+
+cfg.templates.dartel.template4DNii = 'D:\spm25\toolbox\DARTEL\Template_6_IXI555_MNI152.nii';
 cfg.templates.dartel.gmVolumeIndex = 1; % 第1帧=GM
 cfg.templates.dartel.wmVolumeIndex = 2; % 第2帧=WM
-cfg.templates.standard.brainMaskNii = 'D:\DPABI_V9.0_250415\Templates\BrainMask_05_91x109x91.nii';
-cfg.templates.standard.t1TemplateNii = 'D:\DPABI_V9.0_250415\Templates\ch2bet.nii';
+cfg.templates.standard.brainMaskNii = 'D:\DPABI_V9.0_250415\Templates\BrainMask_05_91x109x91.hdr'; % Analyze(.hdr/.img)
+cfg.templates.standard.t1TemplateNii = 'D:\DPABI_V9.0_250415\Templates\ch2.nii';
+cfg.visualization.spmRenderTemplateMat = 'D:\spm25\rend\render_single_subj.mat'; % 仅参考SPM渲染逻辑
 cfg.visualization.brainTemplateNii = cfg.templates.standard.t1TemplateNii;
 ```
 
 > 兼容模式：若你已有独立 GM/WM 模板文件，也可继续使用
 > `cfg.templates.dartel.gmTemplateNii` 与 `cfg.templates.dartel.wmTemplateNii`。
 
-> 启动时会执行 `validate_pipeline_config`，模板缺失会直接报错退出（fail-fast）。
+> 启动时会先执行 `resolve_pipeline_template_paths` 自动按 `DPABI/SPM25` 安装目录推断模板，
+> 然后执行 `validate_pipeline_config` 做 fail-fast 校验。
 
 ### 2. 运行 Pipeline
 
@@ -97,6 +103,7 @@ run_pipeline_sub01;
 ```
 
 所有步骤会自动按序执行，中间产物保存到各输出目录。若某步骤输出已存在则跳过。
+启动时还会生成 `parity_audit_*.txt`，用于对照 SPM25/DPABI 的逻辑级流程审计。
 
 ---
 
