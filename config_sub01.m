@@ -113,7 +113,7 @@ cfg.sliceTimingMs = [0 1430 880 330 1760 1210 660 110 1540 990 440 1870 ...
                      1320 770 220 1650 1100 550];
 
 % 参考层（切片时序校正的目标时间点，通常为中间层或第1层）
-cfg.refSliceIdx = 18;  % 第18层（1-based index），对应时间 cfg.sliceTimingMs(18)
+cfg.refSliceIdx = 1;  % 第18层（1-based index），对应时间 cfg.sliceTimingMs(18)
 
 % ====== 去除起始不稳定 TR ======
 cfg.nDummy = 6;  % 去掉前6个TR（本实验协议）
