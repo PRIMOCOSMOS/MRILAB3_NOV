@@ -27,7 +27,11 @@ end
 
 % 统一使用列向量，避免 MATLAB 隐式扩展导致 N×N 内存爆炸
 Vo = zeros(N, 1);
-V_flat = double(V(:));
+if isa(V, 'double')
+    V_flat = V(:);
+else
+    V_flat = double(V(:));
+end
 % 分块大小经验值：在常见 fMRI 体数据下显著降低峰值内存且保持速度
 blockSize = 2e5;
 
