@@ -78,7 +78,7 @@ cfg.templates.standard.brainMaskNii = fullfile(cfg.installPaths.dpabiRoot, 'Temp
 %
 % ── T1 可视化模板 ───────────────────────────────────────────────────
 %   来自 DPABI/Templates/ch2.nii（Colin Holmes T1 MNI 标准脑，非 ch2bet）
-%   DPARSFA_run.m 第 3255 行: Ch2Filename = fullfile(TemplatePath,'ch2.nii')
+%   DPARSFA_run.m line 3255: Ch2Filename = fullfile(TemplatePath,'ch2.nii')
 cfg.templates.standard.t1TemplateNii = fullfile(cfg.installPaths.dpabiRoot, 'Templates', 'ch2.nii');
 
 % SPM 经典 Renderer 的 rend 模板（.mat）；用于记录参考逻辑

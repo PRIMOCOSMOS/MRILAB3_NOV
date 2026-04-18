@@ -27,6 +27,12 @@ pass = true;
 lines = {};
 lines{end+1} = sprintf('[audit] 时间: %s', char(datetime('now','Format','yyyy-MM-dd HH:mm:ss'))); %#ok<AGROW>
 lines{end+1} = '[audit] 对照来源: SPM25 + DPABI'; %#ok<AGROW>
+lines{end+1} = '[audit] 关键参考URL（主动校验）:'; %#ok<AGROW>
+lines{end+1} = '  SPM: https://raw.githubusercontent.com/spm/spm/main/spm_render.m'; %#ok<AGROW>
+lines{end+1} = '  SPM: https://raw.githubusercontent.com/spm/spm/main/toolbox/DARTEL/spm_dartel_warp.m'; %#ok<AGROW>
+lines{end+1} = '  SPM: https://raw.githubusercontent.com/spm/spm/main/toolbox/DARTEL/spm_dartel_norm_fun.m'; %#ok<AGROW>
+lines{end+1} = '  DPABI: https://raw.githubusercontent.com/Chaogan-Yan/DPABI/master/DPARSF/DPARSFA_run.m'; %#ok<AGROW>
+lines{end+1} = '  DPABI: https://raw.githubusercontent.com/Chaogan-Yan/DPABI/master/DPARSF/Subfunctions/y_Call_dcm2nii.m'; %#ok<AGROW>
 lines{end+1} = '';
 
 for i = 1:size(steps,1)
