@@ -46,6 +46,13 @@ cfg.outDirs = { ...
 % 2) 所有模板会在 run_pipeline_sub01 启动时做 fail-fast 校验
 % 3) 模板文件均来自 DPABI 或 SPM 安装目录，见下方说明
 %
+% 安装目录（用于自动推断模板路径）
+% 用户本机常见路径：
+%   DPABI: D:\DPABI_V9.0_250415
+%   SPM:   D:\spm
+cfg.installPaths.dpabiRoot = 'D:\DPABI_V9.0_250415';
+cfg.installPaths.spmRoot   = 'D:\spm';
+%
 % ── DARTEL 模板 ──────────────────────────────────────────────────────
 %   本 pipeline 为单被试模式，无法自建群组级 DARTEL 模板（DPABI 中
 %   "DARTEL: Create Template" 需多被试联合）。
@@ -58,7 +65,7 @@ cfg.outDirs = { ...
 %     A) 4D 单文件（推荐）: template4DNii + gmVolumeIndex + wmVolumeIndex
 %        第1帧=GM，第2帧=WM（与 DARTEL 惯例一致）
 %     B) 双文件: gmTemplateNii + wmTemplateNii
-cfg.templates.dartel.template4DNii = 'D:\spm12\toolbox\DARTEL\Template_6_IXI555_MNI152.nii';
+cfg.templates.dartel.template4DNii = 'D:\spm\toolbox\DARTEL\Template_6_IXI555_MNI152.nii';
 cfg.templates.dartel.gmVolumeIndex = 1;   % 4D模板中 GM 所在帧（通常为第1帧）
 cfg.templates.dartel.wmVolumeIndex = 2;   % 4D模板中 WM 所在帧（通常为第2帧）
 %
@@ -72,6 +79,10 @@ cfg.templates.standard.brainMaskNii = 'D:\DPABI_V9.0_250415\Templates\BrainMask_
 %   来自 DPABI/Templates/ch2.nii（Colin Holmes T1 MNI 标准脑，非 ch2bet）
 %   DPARSFA_run.m 第 3255 行: Ch2Filename = fullfile(TemplatePath,'ch2.nii')
 cfg.templates.standard.t1TemplateNii = 'D:\DPABI_V9.0_250415\Templates\ch2.nii';
+
+% SPM 经典 Renderer 的 rend 模板（.mat）；用于记录参考逻辑
+% 现代化 3D 渲染可不直接使用该文件，但可用于检查与兼容
+cfg.visualization.spmRenderTemplateMat = 'D:\spm\rend\render_single_subj.mat';
 
 % Renderer（交互式3D显示）所需模板
 cfg.visualization.enable = true;                     % 是否在1st-level后自动出3D交互图

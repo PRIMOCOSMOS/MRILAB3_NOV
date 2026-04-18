@@ -64,6 +64,9 @@ addpath(fullfile(pipelineDir, 'visualize'));
 % -------- 载入配置 --------
 cfg = config_sub01();
 
+% -------- 按 DPABI/SPM 安装目录自动推断模板路径 --------
+cfg = resolve_pipeline_template_paths(cfg);
+
 % -------- 开箱即用配置校验（失败即退出）--------
 validate_pipeline_config(cfg);
 
