@@ -15,7 +15,7 @@ function outFile = reorient_set_origin(inFile, outDir, acVoxCoord)
 %   outDir     - 输出目录
 %   acVoxCoord - AC 在图像中的体素坐标（1-based），[x y z] 向量
 %                例如 [32 53 28]（64×64×36 图像中心附近）
-%                若为空 []，则弹出三正交视图供用户点选（无GUI时回退图像中心）
+%                若为空 []，则弹出三正交视图供用户点选（无 GUI 时回退图像中心）
 %
 % 输出:
 %   outFile - 重定位后的 NIfTI 文件路径（前缀 'reorient_'）
@@ -130,7 +130,7 @@ if isgraphics(fig), delete(fig); end
     function refresh_views()
         % Sagittal (X 固定，显示 Y-Z)
         cla(axSag);
-        sag = squeeze(vol(acVoxCoord(1),:,:))';
+        sag = extract_slice_2d(vol, acVoxCoord, 'sag');
         hSag = imagesc(axSag, sag);
         axis(axSag, 'image'); axis(axSag, 'ij'); axis(axSag, 'off');
         colormap(axSag, gray);
@@ -143,7 +143,7 @@ if isgraphics(fig), delete(fig); end
 
         % Coronal (Y 固定，显示 X-Z)
         cla(axCor);
-        cor = squeeze(vol(:,acVoxCoord(2),:))';
+        cor = extract_slice_2d(vol, acVoxCoord, 'cor');
         hCor = imagesc(axCor, cor);
         axis(axCor, 'image'); axis(axCor, 'ij'); axis(axCor, 'off');
         colormap(axCor, gray);
@@ -156,7 +156,7 @@ if isgraphics(fig), delete(fig); end
 
         % Axial (Z 固定，显示 X-Y)
         cla(axAxi);
-        axi = squeeze(vol(:,:,acVoxCoord(3)))';
+        axi = extract_slice_2d(vol, acVoxCoord, 'axi');
         hAxi = imagesc(axAxi, axi);
         axis(axAxi, 'image'); axis(axAxi, 'ij'); axis(axAxi, 'off');
         colormap(axAxi, gray);
@@ -210,4 +210,17 @@ end
 
 function y = clamp(x, lo, hi)
 y = min(max(x, lo), hi);
+end
+
+function I = extract_slice_2d(vol, acVoxCoord, mode)
+switch lower(mode)
+    case 'sag' % X 固定，显示 Y-Z
+        I = squeeze(vol(acVoxCoord(1),:,:))';
+    case 'cor' % Y 固定，显示 X-Z
+        I = squeeze(vol(:,acVoxCoord(2),:))';
+    case 'axi' % Z 固定，显示 X-Y
+        I = squeeze(vol(:,:,acVoxCoord(3)))';
+    otherwise
+        error('extract_slice_2d: 未知 mode=%s', mode);
+end
 end

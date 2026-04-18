@@ -188,6 +188,8 @@ linIdx = find(mask);
 nVox   = numel(linIdx);
 
 % 建立 体素线性索引 -> mask内索引 的映射，避免越界
+% 说明：使用整幅体数据长度的 uint32 映射表，可将任意邻居线性索引
+% O(1) 映射到 mask 内索引；内存开销可控且显著简化/加速邻域查询。
 lin2mask = zeros(numel(vol), 1, 'uint32');
 lin2mask(linIdx) = uint32(1:nVox);
 
