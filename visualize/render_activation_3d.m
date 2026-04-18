@@ -13,6 +13,19 @@ if ~exist(brainTemplateFile, 'file')
     error('[render_activation_3d] 脑模板不存在: %s', brainTemplateFile);
 end
 
+% SPM Renderer 逻辑解析（仅做兼容记录）:
+% spm_render(dat, brt, rendfile) 的 rendfile 常为 rend/render_single_subj.mat，
+% 内含多视角投影所需的渲染矩阵与深度图（不是可直接旋转的3D网格）。
+% 本函数采用现代化交互3D（isosurface + rotate3d），因此不直接依赖该 .mat，
+% 但如果配置了该文件会进行存在性检查并输出提示，便于追踪与开源逻辑对齐。
+if isfield(visCfg, 'spmRenderTemplateMat') && ~isempty(visCfg.spmRenderTemplateMat)
+    if exist(visCfg.spmRenderTemplateMat, 'file')
+        fprintf('[render_activation_3d] 检测到 SPM Renderer 模板: %s\n', visCfg.spmRenderTemplateMat);
+    else
+        warning('[render_activation_3d] 配置了 SPM Renderer 模板但文件不存在: %s', visCfg.spmRenderTemplateMat);
+    end
+end
+
 [tData, tHdr]     = nifti_read(tMapFile);
 [brainData, brainHdr] = nifti_read(brainTemplateFile);
 tMap   = double(tData(:,:,:,1));
@@ -76,16 +89,4 @@ if isfield(visCfg, 'outputPng') && visCfg.outputPng
     exportgraphics(fig, outPng, 'Resolution', 200);
     fprintf('[render_activation_3d] 已导出截图: %s\n', outPng);
 end
-end
-
-function V_tgt = resample_vol_affine(V_src, src_affine, tgt_affine, tgt_dims)
-% resample_vol_affine - 使用仿射矩阵将源体数据重采样到目标坐标空间
-tx = tgt_dims(1); ty = tgt_dims(2); tz = tgt_dims(3);
-[Xt, Yt, Zt] = ndgrid(1:tx, 1:ty, 1:tz);
-nTgt = tx * ty * tz;
-tgt_vox_0 = [Xt(:)'-1; Yt(:)'-1; Zt(:)'-1; ones(1, nTgt)];
-tgt_world  = tgt_affine * tgt_vox_0;
-src_vox_1  = (src_affine \ tgt_world);
-src_vox_1  = src_vox_1(1:3,:) + 1;
-V_tgt = reshape(trilinear_interp(V_src, src_vox_1), tx, ty, tz);
 end

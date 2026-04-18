@@ -2,12 +2,13 @@ function cfg = resolve_pipeline_template_paths(cfg)
 % resolve_pipeline_template_paths - 根据安装根目录自动推断并修正模板路径
 % 目标：
 % 1) 兼容 DPABI Templates 与 DPABI/Templates/SPMTemplates 两套目录结构
-% 2) 兼容用户本机 SPM 安装目录（如 D:\spm）
+% 2) 兼容用户本机 SPM 安装目录（优先 SPM25）
 % 3) 避免硬编码单一路径导致模板缺失
 
 % ---- 安装根目录（可在 config 中覆盖）----
 dpabiRoot = 'D:\DPABI_V9.0_250415';
-spmRoot   = 'D:\spm';
+spmRoot   = 'D:\spm25';
+spmFallbackRoots = {'D:\spm'};
 if isfield(cfg, 'installPaths')
     if isfield(cfg.installPaths, 'dpabiRoot') && ~isempty(cfg.installPaths.dpabiRoot)
         dpabiRoot = cfg.installPaths.dpabiRoot;
@@ -15,37 +16,41 @@ if isfield(cfg, 'installPaths')
     if isfield(cfg.installPaths, 'spmRoot') && ~isempty(cfg.installPaths.spmRoot)
         spmRoot = cfg.installPaths.spmRoot;
     end
+    if isfield(cfg.installPaths, 'spmFallbackRoots') && ~isempty(cfg.installPaths.spmFallbackRoots)
+        spmFallbackRoots = cfg.installPaths.spmFallbackRoots;
+    end
 end
+spmRoots = unique(nonempty([{spmRoot}, spmFallbackRoots]), 'stable');
 
 % ---- DARTEL 模板（4D）----
-dartelCandidates = unique(nonempty({
-    getfield_safe(cfg, {'templates','dartel','template4DNii'}), ...
-    fullfile(spmRoot,   'toolbox', 'DARTEL', 'Template_6_IXI555_MNI152.nii'), ...
-    fullfile(dpabiRoot, 'Templates', 'SPMTemplates', 'toolbox', 'DARTEL', 'Template_6_IXI555_MNI152.nii')
-}));
+dartelCandidates = unique(nonempty([ ...
+    {getfield_safe(cfg, {'templates','dartel','template4DNii'})}, ...
+    map_roots(spmRoots, {'toolbox','DARTEL','Template_6_IXI555_MNI152.nii'}), ...
+    {fullfile(dpabiRoot, 'Templates', 'SPMTemplates', 'toolbox', 'DARTEL', 'Template_6_IXI555_MNI152.nii')} ...
+]), 'stable');
 [dartelPath, dartelFound] = first_existing_file(dartelCandidates);
 if dartelFound
     cfg.templates.dartel.template4DNii = dartelPath;
 end
 
 % ---- 标准脑掩模（优先 DPABI 的 BrainMask_05_91x109x91）----
-brainMaskCandidates = unique(nonempty({
-    getfield_safe(cfg, {'templates','standard','brainMaskNii'}), ...
-    fullfile(dpabiRoot, 'Templates', 'BrainMask_05_91x109x91.hdr'), ...
-    fullfile(dpabiRoot, 'Templates', 'SPMTemplates', 'toolbox', 'OldNorm', 'mask_ICV.hdr')
-}));
+brainMaskCandidates = unique(nonempty([ ...
+    {getfield_safe(cfg, {'templates','standard','brainMaskNii'})}, ...
+    {fullfile(dpabiRoot, 'Templates', 'BrainMask_05_91x109x91.hdr')}, ...
+    {fullfile(dpabiRoot, 'Templates', 'SPMTemplates', 'toolbox', 'OldNorm', 'mask_ICV.hdr')} ...
+]), 'stable');
 [brainMaskPath, brainMaskFound] = first_existing_file(brainMaskCandidates);
 if brainMaskFound
     cfg.templates.standard.brainMaskNii = brainMaskPath;
 end
 
 % ---- T1 可视化模板（DPABI ch2.nii，回退 SPM canonical）----
-t1TemplateCandidates = unique(nonempty({
-    getfield_safe(cfg, {'templates','standard','t1TemplateNii'}), ...
-    fullfile(dpabiRoot, 'Templates', 'ch2.nii'), ...
-    fullfile(spmRoot,   'canonical', 'single_subj_T1.nii'), ...
-    fullfile(dpabiRoot, 'Templates', 'SPMTemplates', 'canonical', 'single_subj_T1.nii')
-}));
+t1TemplateCandidates = unique(nonempty([ ...
+    {getfield_safe(cfg, {'templates','standard','t1TemplateNii'})}, ...
+    {fullfile(dpabiRoot, 'Templates', 'ch2.nii')}, ...
+    map_roots(spmRoots, {'canonical','single_subj_T1.nii'}), ...
+    {fullfile(dpabiRoot, 'Templates', 'SPMTemplates', 'canonical', 'single_subj_T1.nii')} ...
+]), 'stable');
 [t1TemplatePath, t1TemplateFound] = first_existing_file(t1TemplateCandidates);
 if t1TemplateFound
     cfg.templates.standard.t1TemplateNii = t1TemplatePath;
@@ -55,11 +60,11 @@ if t1TemplateFound
 end
 
 % ---- SPM Renderer 模板 MAT（用于记录与兼容，不强依赖）----
-renderMatCandidates = unique(nonempty({
-    getfield_safe(cfg, {'visualization','spmRenderTemplateMat'}), ...
-    fullfile(spmRoot,   'rend', 'render_single_subj.mat'), ...
-    fullfile(dpabiRoot, 'Templates', 'SPMTemplates', 'rend', 'render_single_subj.mat')
-}));
+renderMatCandidates = unique(nonempty([ ...
+    {getfield_safe(cfg, {'visualization','spmRenderTemplateMat'})}, ...
+    map_roots(spmRoots, {'rend','render_single_subj.mat'}), ...
+    {fullfile(dpabiRoot, 'Templates', 'SPMTemplates', 'rend', 'render_single_subj.mat')} ...
+]), 'stable');
 [renderMatPath, renderMatFound] = first_existing_file(renderMatCandidates);
 if renderMatFound
     cfg.visualization.spmRenderTemplateMat = renderMatPath;
@@ -67,7 +72,8 @@ end
 
 % ---- 记录推断结果 ----
 cfg.templateResolution.dpabiRoot = dpabiRoot;
-cfg.templateResolution.spmRoot   = spmRoot;
+cfg.templateResolution.spmRootPriority   = spmRoot;
+cfg.templateResolution.spmRootsScanned   = spmRoots;
 cfg.templateResolution.dartelTemplateFound  = dartelFound;
 cfg.templateResolution.brainMaskFound       = brainMaskFound;
 cfg.templateResolution.t1TemplateFound      = t1TemplateFound;
@@ -97,6 +103,17 @@ end
 
 function out = nonempty(c)
 out = c(~cellfun(@isempty, c));
+end
+
+function out = map_roots(roots, relParts)
+if isempty(roots)
+    out = {};
+    return;
+end
+out = cell(1, numel(roots));
+for i = 1:numel(roots)
+    out{i} = fullfile(roots{i}, relParts{:});
+end
 end
 
 function v = getfield_safe(s, fields)

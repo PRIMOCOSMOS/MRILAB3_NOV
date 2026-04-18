@@ -81,6 +81,11 @@ logFile = fullfile(cfg.logDir, sprintf('pipeline_%s.log', datestr(now,'yyyymmdd_
 write_log(logFile, '=== Pipeline 开始 ===');
 write_log(logFile, sprintf('被试: %s', cfg.subID));
 
+% -------- 逻辑一致性审计（对照 SPM25/DPABI 关键流程）--------
+auditFile = fullfile(cfg.logDir, sprintf('parity_audit_%s.txt', datestr(now,'yyyymmdd_HHMMSS')));
+audit = audit_pipeline_parity(cfg, pipelineDir, auditFile);
+write_log(logFile, sprintf('ParityAudit: %s (pass=%d)', audit.reportFile, audit.pass));
+
 % ======================================================================
 % Step 01: DICOM → NIfTI
 % ======================================================================
