@@ -129,7 +129,7 @@ function X_dct = build_dct_drift(nScans, TR, hpf_sec)
 % 截断频率: 1/hpf_sec Hz
 % 保留周期 > hpf_sec 的成分作为漂移
 
-% 参照 SPM(spm_filter): n = fix(2*(k*TR)/HParam + 1)，并移除 DC 分量
+% 参照 SPM(spm_filter): n = fix(2*nScans*TR/hpf_sec + 1)，并移除 DC 分量
 nBases = fix(2 * nScans * TR / hpf_sec + 1);
 if nBases <= 1
     X_dct = [];
