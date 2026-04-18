@@ -58,7 +58,12 @@ tMap      = reshape(tVec,      nx, ny, nz);
 betaConMap= reshape(conBeta,   nx, ny, nz);
 
 % -------- 计算 p 值（双尾，未校正）--------
-df = max(size(X,1) - rank(X), 1);
+df = size(X,1) - rank(X);
+if df <= 0
+    error('[compute_tcontrast] 自由度无效 (df=%d)，请检查设计矩阵秩与扫描数', df);
+elseif df < 5
+    warning('[compute_tcontrast] 自由度较低 (df=%d)，统计推断稳定性有限', df);
+end
 pMap = 2 * (1 - tcdf_approx(abs(tVec), df));
 pMap = reshape(pMap, nx, ny, nz);
 pMap(pMap < eps) = eps;

@@ -34,12 +34,21 @@ nConds = numel(cfg.cond.names);
 % 插入运动参数：[条件 | 运动(6) | 常数 | 漂移]
 % 说明: 该顺序与 SPM 常用建模习惯一致，便于保持条件列索引稳定，
 % 同时将运动参数作为 nuisance regressors 放在任务条件后、漂移项前。
-nConstDrift = size(X_base,2) - nConds;
 X = [X_base(:, 1:nConds), rp, X_base(:, nConds+1:end)];
 
 % 更新列名
 rpNames = {'rp_tx','rp_ty','rp_tz','rp_rx','rp_ry','rp_rz'};
 allNames = [condNames(1:nConds), rpNames, condNames(nConds+1:end)];
+
+% -------- 设计矩阵质量控制与秩修复（仅移除 nuisance 共线列）--------
+protectIdx = 1:nConds;  % 任务条件列必须保留
+if isfield(cfg, 'tcons') && isfield(cfg.tcons, 'weight')
+    c = cfg.tcons.weight(:);
+    nz = find(abs(c) > 0);
+    protectIdx = unique([protectIdx(:); nz(:)]);
+    protectIdx = protectIdx(protectIdx >= 1 & protectIdx <= size(X,2))';
+end
+[X, allNames] = enforce_fullrank_design(X, allNames, protectIdx);
 
 fprintf('[run_firstlevel_glm] 设计矩阵: [%d × %d]\n', size(X,1), size(X,2));
 rankX = rank(X);
@@ -47,7 +56,7 @@ rcondXtX = rcond(X' * X + 1e-12 * eye(size(X,2)));
 fprintf('[run_firstlevel_glm] 设计矩阵秩: %d / %d, rcond(X''X)=%.3e\n', ...
     rankX, size(X,2), rcondXtX);
 if rankX < size(X,2)
-    warning('[run_firstlevel_glm] 设计矩阵秩不足，统计结果可能不稳定');
+    error('[run_firstlevel_glm] 设计矩阵仍秩不足 (%d/%d)，请检查任务设计/协变量', rankX, size(X,2));
 end
 
 % -------- 保存设计矩阵图像 --------
@@ -171,4 +180,65 @@ end
 
 fprintf('[run_firstlevel_glm] === 一阶 GLM 分析完成 ===\n');
 fprintf('[run_firstlevel_glm] 输出目录: %s\n', outDir);
+end
+
+function [X_out, names_out] = enforce_fullrank_design(X_in, names_in, protectIdx)
+% 仅通过移除 nuisance 列修复秩缺陷；保护任务/对比涉及列
+X_out = X_in;
+names_out = names_in;
+nCols = size(X_out, 2);
+protectIdx = unique(protectIdx(:))';
+protectIdx = protectIdx(protectIdx >= 1 & protectIdx <= nCols);
+
+if rank(X_out) == nCols
+    return;
+end
+
+keepMask = true(1, nCols);
+nuisance = setdiff(1:nCols, protectIdx, 'stable');
+if isempty(nuisance)
+    error('[run_firstlevel_glm] 所有列都被保护，无法移除共线列修复秩缺陷');
+end
+
+while true
+    curCols = find(keepMask);
+    curRank = rank(X_out(:, curCols));
+    if curRank == numel(curCols)
+        break;
+    end
+
+    bestCol = 0;
+    bestRank = -Inf;
+    canDrop = nuisance(keepMask(nuisance));
+    for i = 1:numel(canDrop)
+        c = canDrop(i);
+        km = keepMask;
+        km(c) = false;
+        r = rank(X_out(:, km));
+        if r > bestRank
+            bestRank = r;
+            bestCol = c;
+        end
+    end
+
+    if bestCol == 0 || bestRank <= curRank
+        break;
+    end
+    keepMask(bestCol) = false;
+end
+
+keptCols = find(keepMask);
+droppedCols = find(~keepMask);
+
+if rank(X_out(:, keptCols)) < numel(keptCols)
+    error('[run_firstlevel_glm] 无法在保留任务/对比列前提下获得满秩设计矩阵');
+end
+
+X_out = X_out(:, keptCols);
+names_out = names_out(keptCols);
+
+if ~isempty(droppedCols)
+    droppedTxt = strjoin(arrayfun(@(i) sprintf('%d:%s', i, names_in{i}), droppedCols, 'UniformOutput', false), ', ');
+    warning('[run_firstlevel_glm] 检测到共线 nuisance 列并已移除: %s', droppedTxt);
+end
 end
