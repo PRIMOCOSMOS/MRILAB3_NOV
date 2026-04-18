@@ -187,25 +187,56 @@ function gamma_mrf = apply_mrf(vol, mask, gamma, nClasses, beta)
 linIdx = find(mask);
 nVox   = numel(linIdx);
 
-% 6 个邻域方向的偏移（线性索引差）
-offsets = [1, -1, nx, -nx, nx*ny, -nx*ny];
+% 建立 体素线性索引 -> mask内索引 的映射，避免越界
+% 说明：使用整幅体数据长度的 uint32 映射表，可将任意邻居线性索引
+% O(1) 映射到 mask 内索引；内存开销可控且显著简化/加速邻域查询。
+lin2mask = zeros(numel(vol), 1, 'uint32');
+lin2mask(linIdx) = uint32(1:nVox);
+
+% 预计算 mask 体素坐标
+[x, y, z] = ind2sub([nx, ny, nz], linIdx);
+
+% 6 邻域方向（x/y/z）
+dirs = [ ...
+     1  0  0;
+    -1  0  0;
+     0  1  0;
+     0 -1  0;
+     0  0  1;
+     0  0 -1];
 
 gamma_mrf = gamma;
 
 for iter = 1:3  % MRF 迭代次数（简化）
-    % 获取每个体素的邻域类别概率之和
-    neighborSum = zeros(nVox, nClasses);
-    for d = 1:6
-        nb_lin = linIdx + offsets(d);
-        valid  = nb_lin >= 1 & nb_lin <= numel(vol) & mask(nb_lin);
-        nb_lin(~valid) = linIdx(~valid);  % 无效邻域用自身代替
+    % 当前硬标签
+    [~, hardLabel] = max(gamma_mrf, [], 2);   % [nVox x 1], 取值 1..nClasses
 
-        % 邻域的当前类别分配（使用硬标签）
-        [~, nb_label] = max(gamma_mrf, [], 2);
-        nb_lab_neighbors = nb_label(nb_lin);  % 不精确但足够
+    % 获取每个体素的邻域类别计数
+    neighborSum = zeros(nVox, nClasses);
+    for d = 1:size(dirs,1)
+        xn = x + dirs(d,1);
+        yn = y + dirs(d,2);
+        zn = z + dirs(d,3);
+
+        inVol = xn >= 1 & xn <= nx & ...
+                yn >= 1 & yn <= ny & ...
+                zn >= 1 & zn <= nz;
+
+        nb_mask_idx = zeros(nVox, 1, 'uint32');
+        if any(inVol)
+            nb_lin = sub2ind([nx, ny, nz], xn(inVol), yn(inVol), zn(inVol));
+            nb_mask_idx(inVol) = lin2mask(nb_lin);
+        end
+
+        % 默认用自身标签（边界外或非脑掩模邻居）
+        nb_label = hardLabel;
+        hasMaskedNeighbor = nb_mask_idx > 0;
+        if any(hasMaskedNeighbor)
+            nb_label(hasMaskedNeighbor) = hardLabel(double(nb_mask_idx(hasMaskedNeighbor)));
+        end
 
         for k = 1:nClasses
-            neighborSum(:,k) = neighborSum(:,k) + double(nb_lab_neighbors == k);
+            neighborSum(:,k) = neighborSum(:,k) + double(nb_label == k);
         end
     end
 

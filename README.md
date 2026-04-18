@@ -29,7 +29,7 @@ MRILAB3_NOV/
 │   ├── remove_dummy_tr.m         % 去除起始不稳定 TR
 │   ├── slice_timing_corr.m       % 切片时序校正（傅里叶时移）
 │   ├── realign_estimate_reslice.m% 头动校正（Gauss-Newton）+ rp_*.txt
-│   ├── reorient_set_origin.m     % 坐标原点重定位到 AC
+│   ├── reorient_set_origin.m     % 三正交视图点选 AC 后重定位坐标原点
 │   ├── brain_extract_t1.m        % T1 脑提取（BET）
 │   ├── coreg_t1_to_fun.m         % T1 配准到功能像（互信息）
 │   ├── segment_tissue.m          % GMM 组织分割（GM/WM/CSF）
@@ -115,7 +115,7 @@ run_pipeline_sub01;
 | 02 | 去除 Dummy TR | FunImg | FunImgA |
 | 03 | Slice Timing 校正 | FunImgA | FunImgA（st前缀）|
 | 04 | 头动校正（Realign）| FunImgA | FunImgAR + RealignParameter |
-| 05 | 重定位（Reorient）| FunImgAR / T1Img | 原目录（reorient前缀）|
+| 05 | 重定位（Reorient，三视图点选AC）| FunImgAR / T1Img | 原目录（reorient前缀）|
 | 06 | T1 脑提取（BET） | T1Img（reorient后） | T1ImgBet |
 | 07 | T1 配准到 Fun | T1ImgBet | T1ImgCoreg |
 | 08 | 组织分割 | T1ImgCoreg | T1ImgNewSegment |
