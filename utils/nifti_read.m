@@ -109,15 +109,45 @@ hdr.intent_name   = deblank(fread(fid, 16, '*char')');  % 16
 hdr.magic         = deblank(fread(fid, 4, '*char')');   % 4
 fclose(fid);
 
+% -------- 检测文件格式（NIfTI-1 vs Analyze 7.5）--------
+% NIfTI-1 magic 常量
+NIFTI1_MAGIC_DUAL   = 'ni1';  % .hdr/.img
+NIFTI1_MAGIC_SINGLE = 'n+1';  % .nii
+% NIfTI-1 的 magic 字段为 "ni1"（hdr/img 双文件）或 "n+1"（.nii 单文件）
+% Analyze 7.5 的 magic 字段不符合上述规则
+isNifti1 = (numel(hdr.magic) >= 3) && ...
+           (strncmpi(hdr.magic, NIFTI1_MAGIC_DUAL, 3) || strncmpi(hdr.magic, NIFTI1_MAGIC_SINGLE, 3));
+
 % -------- 构建仿射矩阵 --------
-% 优先使用 sform（sform_code > 0）
-if hdr.sform_code > 0
-    hdr.affine = [hdr.srow_x(:)'; hdr.srow_y(:)'; hdr.srow_z(:)'; 0 0 0 1];
-elseif hdr.qform_code > 0
-    hdr.affine = qform2affine(hdr);
+if isNifti1
+    % NIfTI-1 格式：优先使用 sform（sform_code > 0），否则用 qform，否则用 pixdim
+    if hdr.sform_code > 0
+        hdr.affine = [hdr.srow_x(:)'; hdr.srow_y(:)'; hdr.srow_z(:)'; 0 0 0 1];
+    elseif hdr.qform_code > 0
+        hdr.affine = qform2affine(hdr);
+    else
+        hdr.affine = diag([hdr.pixdim(2:4); 1]);
+    end
 else
-    % 使用 pixdim 构建对角仿射
-    hdr.affine = diag([hdr.pixdim(2:4); 1]);
+    % Analyze 7.5 格式：NIfTI 字段在此无意义，需重新解析
+    % 优先查找 SPM 风格的 .mat sidecar 文件（包含 4×4 仿射矩阵变量 mat）
+    [fdir2, fbase2, ~] = fileparts(hdrFile);
+    matSidecar = fullfile(fdir2, [fbase2 '.mat']);
+    if exist(matSidecar, 'file')
+        try
+            m = load(matSidecar, 'mat');
+            hdr.affine = double(m.mat);
+            fprintf('[nifti_read] 从 .mat sidecar 加载仿射矩阵: %s\n', matSidecar);
+        catch
+            hdr.affine = analyze75_affine_from_originator(hdrFile, hdr, byteOrder);
+        end
+    else
+        % 无 .mat sidecar：从 Analyze 7.5 的 originator 字段重建仿射矩阵
+        hdr.affine = analyze75_affine_from_originator(hdrFile, hdr, byteOrder);
+    end
+    % Analyze 7.5 的 sform/qform 字段无意义，清零以免误用
+    hdr.sform_code = 0;
+    hdr.qform_code = 0;
 end
 
 % -------- 提取维度 --------
@@ -205,4 +235,68 @@ dz = hdr.pixdim(4) * sign(hdr.pixdim(1));  % qfac
 T = [hdr.qoffset_x; hdr.qoffset_y; hdr.qoffset_z];
 
 affine = [R .* [dx dy dz], T; 0 0 0 1];
+end
+
+function affine = analyze75_affine_from_originator(hdrFile, hdr, byteOrder)
+% analyze75_affine_from_originator - 从 Analyze 7.5 头的 originator 字段重建仿射矩阵
+%
+% Analyze 7.5 数据结构（来自 DBIRTH 格式规范）:
+%   以下字节号均为“相对文件起始位置”的绝对字节号（0-based）
+%   data_history 起始于字节 148
+%   hist.originator 位于字节 253，为 5 个 int16（10字节）
+%     originator[0..2] = x,y,z 原点体素坐标（1-based）
+%   hist.orient 位于字节 252（1字节 char），指定方位：
+%     0 = 横断位（transverse），SPM 默认，x 轴取反（LAS 坐标系）
+%
+% 对于 SPM 生成的 Analyze 文件（DPABI Templates 使用此约定）:
+%   仿射矩阵为:
+%     [−dx   0   0   dx*ox ]
+%     [  0  dy   0  −dy*(oy−1)]
+%     [  0   0  dz  −dz*(oz−1)]
+%     [  0   0   0   1       ]
+%   其中 dx,dy,dz 为体素尺寸（pixdim[2:4]），
+%   ox,oy,oz 为 originator 给出的原点体素坐标（1-based）。
+%
+% 当 originator 全为零时，回退到 pixdim 对角仿射。
+
+dx = double(hdr.pixdim(2));
+dy = double(hdr.pixdim(3));
+dz = double(hdr.pixdim(4));
+
+% 从 Analyze 7.5 头文件读取 orient 和 originator
+ANALYZE_ORIENT_OFFSET = 252; % 0-based 文件字节偏移（hist.orient 字段起始于 byte 252）
+% 注意：fseek 使用 0-based 字节偏移：
+%   字节 252 = hist.orient（1 byte uint8，方位代码）
+%   字节 253 起 = hist.originator（5 x int16，10 bytes，前3个为 x/y/z 原点）
+fid = fopen(hdrFile, 'rb', byteOrder);
+if fid == -1
+    warning('[nifti_read] 无法读取 Analyze originator，使用像素对角仿射');
+    affine = diag([dx dy dz 1]);
+    return;
+end
+fseek(fid, ANALYZE_ORIENT_OFFSET, 'bof');
+orient     = fread(fid, 1, 'uint8');      % hist.orient (byte 252)
+originator = fread(fid, 5, 'int16');      % hist.originator[0..4] (bytes 253-262)
+fclose(fid);
+
+ox = double(originator(1));  % x 原点（1-based 体素坐标）
+oy = double(originator(2));  % y 原点（1-based 体素坐标）
+oz = double(originator(3));  % z 原点（1-based 体素坐标）
+
+if ox == 0 && oy == 0 && oz == 0
+    % originator 全零：无原点信息，使用像素对角仿射（原点在体素(1,1,1)）
+    warning('[nifti_read] Analyze originator 全零，使用像素对角仿射（无空间原点信息）');
+    affine = diag([dx dy dz 1]);
+    return;
+end
+
+% SPM Analyze 7.5 横断位（orient=0）默认 LAS 坐标系：x 轴取反
+% 原点体素 (ox,oy,oz) 对应世界坐标 (0,0,0)。
+% 这里 y/z 使用 (o-1) 是因为仿射矩阵按 0-based 体素索引建模。
+% x 方向采用 dx*ox（而非 dx*(ox-1)）是沿用 SPM 处理 Analyze 头的约定，
+% 与其默认 LAS 方向定义（x 轴取反）保持一致。
+affine = [-dx  0   0   dx*ox;
+           0  dy   0  -dy*(oy-1);
+           0   0  dz  -dz*(oz-1);
+           0   0   0   1       ];
 end
