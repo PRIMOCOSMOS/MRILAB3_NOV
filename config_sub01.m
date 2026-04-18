@@ -97,6 +97,10 @@ cfg.visualization.brainTemplateNii = cfg.templates.standard.t1TemplateNii;
 % 参考流程一致性审计（对照 SPM25/DPABI 逻辑级流程）
 cfg.referenceAudit.strict = false;  % true 时若关键流程缺失将 fail-fast
 
+% ====== Pipeline 执行策略 ======
+% true: 每次运行都从头重算，不因已有输出文件而跳过步骤
+cfg.pipeline.forceRerun = true;
+
 % ====== EPI/MOSAIC 扫描参数 ======
 cfg.TR          = 2.0;      % 重复时间 (秒)
 cfg.nSlices     = 36;       % 层数

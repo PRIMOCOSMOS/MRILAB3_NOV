@@ -129,22 +129,19 @@ function X_dct = build_dct_drift(nScans, TR, hpf_sec)
 % 截断频率: 1/hpf_sec Hz
 % 保留周期 > hpf_sec 的成分作为漂移
 
-nBases = floor(2 * nScans * TR / hpf_sec);  % 基函数数量
-if nBases < 1
+% 参照 SPM(spm_filter): n = fix(2*(k*RT)/HParam + 1)，并移除 DC 分量
+nBases = fix(2 * nScans * TR / hpf_sec + 1);
+if nBases <= 1
     X_dct = [];
     return;
 end
 
 % DCT-II 基函数（标准正交化）
-% k=0 使用 sqrt(1/nScans)，k>0 使用 sqrt(2/nScans)
-n_col = nBases;
+% k=1 为 DC 常数项（与模型常数列共线），此处显式移除，仅保留 k=2..nBases
+n_col = nBases - 1;
 X_dct = zeros(nScans, n_col);
-for k = 1:n_col
-    if k == 1
-        norm_factor = sqrt(1/nScans);
-    else
-        norm_factor = sqrt(2/nScans);
-    end
-    X_dct(:,k) = cos(pi * (0:nScans-1)' * (k-1) / nScans) * norm_factor;
+for k = 2:nBases
+    norm_factor = sqrt(2/nScans);
+    X_dct(:,k-1) = cos(pi * (0:nScans-1)' * (k-1) / nScans) * norm_factor;
 end
 end

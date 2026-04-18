@@ -42,6 +42,13 @@ rpNames = {'rp_tx','rp_ty','rp_tz','rp_rx','rp_ry','rp_rz'};
 allNames = [condNames(1:nConds), rpNames, condNames(nConds+1:end)];
 
 fprintf('[run_firstlevel_glm] 设计矩阵: [%d × %d]\n', size(X,1), size(X,2));
+rankX = rank(X);
+rcondXtX = rcond(X' * X + 1e-12 * eye(size(X,2)));
+fprintf('[run_firstlevel_glm] 设计矩阵秩: %d / %d, rcond(X''X)=%.3e\n', ...
+    rankX, size(X,2), rcondXtX);
+if rankX < size(X,2)
+    warning('[run_firstlevel_glm] 设计矩阵秩不足，统计结果可能不稳定');
+end
 
 % -------- 保存设计矩阵图像 --------
 ensure_dir(outDir);

@@ -35,12 +35,13 @@ if numel(contrast) < nCols
 end
 contrast = contrast(1:nCols);
 
-% -------- 计算 (X'X)^{-1}（或伪逆）--------
-XtX = X' * X + 1e-10 * eye(nCols);
-XtX_inv = inv(XtX);  % [nCols × nCols]
+% -------- 计算 β 协方差核（数值稳定）--------
+% 对于 beta=pinv(X)*Y，有 Cov(beta)=sigma^2 * (pinv(X)*pinv(X)')
+pX = pinv(X);                 % [nCols × nScans]
+covBeta = pX * pX.';          % [nCols × nCols]
 
-% 对比方差因子: c'(X'X)^{-1}c
-cov_factor = contrast' * XtX_inv * contrast;  % 标量
+% 对比方差因子: c' Cov(beta)/sigma^2 c
+cov_factor = contrast' * covBeta * contrast;  % 标量
 cov_factor = max(cov_factor, 1e-12);
 
 % -------- 计算对比效应量 c'β --------
@@ -57,7 +58,7 @@ tMap      = reshape(tVec,      nx, ny, nz);
 betaConMap= reshape(conBeta,   nx, ny, nz);
 
 % -------- 计算 p 值（双尾，未校正）--------
-df = size(X,1) - rank(X);
+df = max(size(X,1) - rank(X), 1);
 pMap = 2 * (1 - tcdf_approx(abs(tVec), df));
 pMap = reshape(pMap, nx, ny, nz);
 pMap(pMap < eps) = eps;

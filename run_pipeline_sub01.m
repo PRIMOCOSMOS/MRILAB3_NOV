@@ -64,6 +64,16 @@ addpath(fullfile(pipelineDir, 'visualize'));
 % -------- 载入配置 --------
 cfg = config_sub01();
 
+% -------- 执行策略：默认每次全流程重算，不跳过已存在结果 --------
+forceRerun = true;
+if isfield(cfg, 'pipeline') && isfield(cfg.pipeline, 'forceRerun')
+    forceRerun = logical(cfg.pipeline.forceRerun);
+end
+if forceRerun
+    fprintf('[Pipeline] forceRerun=1：本次运行将不跳过任何步骤。\n');
+end
+shouldRun = @(f) forceRerun || ~exist(f, 'file');
+
 % -------- 按 DPABI/SPM 安装目录自动推断模板路径 --------
 cfg = resolve_pipeline_template_paths(cfg);
 
@@ -95,13 +105,13 @@ fprintf('\n--- Step 01: DICOM → NIfTI ---\n');
 funNii = fullfile(cfg.funImgDir, 'bold_4d.nii');
 t1Nii  = fullfile(cfg.t1ImgDir,  't1.nii');
 
-if ~exist(funNii, 'file')
+if shouldRun(funNii)
     funNii = dicom2nifti_fun(cfg.funRawDir, cfg.funImgDir, cfg);
 else
     write_log(logFile, '  功能像 NIfTI 已存在，跳过');
 end
 
-if ~exist(t1Nii, 'file')
+if shouldRun(t1Nii)
     t1Nii = dicom2nifti_t1(cfg.t1RawDir, cfg.t1ImgDir);
 else
     write_log(logFile, '  T1 NIfTI 已存在，跳过');
@@ -116,7 +126,7 @@ write_log(logFile, sprintf('Step02: 去除前 %d TR', cfg.nDummy));
 fprintf('\n--- Step 02: 去除 Dummy TR ---\n');
 
 funNii_A = fullfile(cfg.funImgADir, ['a' 'bold_4d.nii']);
-if ~exist(funNii_A, 'file')
+if shouldRun(funNii_A)
     funNii_A = remove_dummy_tr(funNii, cfg.funImgADir, cfg.nDummy);
 else
     write_log(logFile, '  已存在，跳过');
@@ -131,7 +141,7 @@ fprintf('\n--- Step 03: Slice Timing Correction ---\n');
 
 [~, funBase_A] = fileparts(funNii_A);
 funNii_ST = fullfile(cfg.funImgADir, ['st' funBase_A '.nii']);
-if ~exist(funNii_ST, 'file')
+if shouldRun(funNii_ST)
     funNii_ST = slice_timing_corr(funNii_A, cfg.funImgADir, ...
         cfg.sliceTimingMs, cfg.refSliceIdx, cfg.TR);
 else
@@ -149,7 +159,7 @@ fprintf('\n--- Step 04: Realign ---\n');
 funNii_R  = fullfile(cfg.funImgARDir, ['r' funBase_ST '.nii']);
 rpFile    = fullfile(cfg.realignParamDir, sprintf('rp_%s.txt', cfg.subID));
 
-if ~exist(funNii_R, 'file')
+if shouldRun(funNii_R)
     [funNii_R, rpFile] = realign_estimate_reslice(...
         funNii_ST, cfg.funImgARDir, cfg.realignParamDir, cfg);
 else
@@ -167,7 +177,7 @@ fprintf('\n--- Step 05: Reorient ---\n');
 % 功能像重定位
 [~, funBase_R] = fileparts(funNii_R);
 funNii_Ro = fullfile(cfg.funImgARDir, ['reorient_' funBase_R '.nii']);
-if ~exist(funNii_Ro, 'file')
+if shouldRun(funNii_Ro)
     funNii_Ro = reorient_set_origin(funNii_R, cfg.funImgARDir, []);
 else
     write_log(logFile, '  功能像重定位已存在，跳过');
@@ -176,7 +186,7 @@ end
 % T1 重定位
 [~, t1Base] = fileparts(t1Nii);
 t1Nii_Ro = fullfile(cfg.t1ImgDir, ['reorient_' t1Base '.nii']);
-if ~exist(t1Nii_Ro, 'file')
+if shouldRun(t1Nii_Ro)
     t1Nii_Ro = reorient_set_origin(t1Nii, cfg.t1ImgDir, []);
 else
     write_log(logFile, '  T1 重定位已存在，跳过');
@@ -193,7 +203,7 @@ fprintf('\n--- Step 06: BET T1 ---\n');
 [~, t1Base_Ro] = fileparts(t1Nii_Ro);
 t1Nii_Bet = fullfile(cfg.t1ImgBetDir, ['bet_' t1Base_Ro '.nii']);
 t1Mask_Bet = fullfile(cfg.t1ImgBetDir, ['betmask_' t1Base_Ro '.nii']);
-if ~exist(t1Nii_Bet, 'file')
+if shouldRun(t1Nii_Bet)
     [t1Nii_Bet, t1Mask_Bet] = brain_extract_t1(t1Nii_Ro, cfg.t1ImgBetDir, cfg);
 else
     write_log(logFile, '  已存在，跳过');
@@ -208,7 +218,7 @@ write_log(logFile, 'Step07: T1 Coreg to Fun');
 fprintf('\n--- Step 07: Coreg T1 → Fun ---\n');
 
 t1Nii_Coreg = fullfile(cfg.t1ImgCoregDir, ['coreg_' t1Base_Ro '.nii']);
-if ~exist(t1Nii_Coreg, 'file')
+if shouldRun(t1Nii_Coreg)
     [t1Nii_Coreg, ~] = coreg_t1_to_fun(t1Nii_Bet, funNii_Ro, cfg.t1ImgCoregDir);
 else
     write_log(logFile, '  已存在，跳过');
@@ -225,7 +235,7 @@ gmFile  = fullfile(cfg.t1SegDir, 'c2_t1.nii');  % GM: c2
 wmFile  = fullfile(cfg.t1SegDir, 'c3_t1.nii');  % WM: c3
 csfFile = fullfile(cfg.t1SegDir, 'c1_t1.nii');  % CSF: c1
 
-if ~exist(gmFile, 'file')
+if shouldRun(gmFile)
     [gmFile, wmFile, csfFile] = segment_tissue(t1Nii_Coreg, cfg.t1SegDir, cfg);
 else
     write_log(logFile, '  已存在，跳过');
@@ -240,7 +250,7 @@ write_log(logFile, 'Step09: DARTEL 非线性配准');
 fprintf('\n--- Step 09: DARTEL-like Warp ---\n');
 
 flowFile = fullfile(cfg.t1SegDir, 'u_rc1_Template.nii');
-if ~exist(flowFile, 'file')
+if shouldRun(flowFile)
     [flowFile, ~] = dartel_warp(gmFile, wmFile, cfg.t1SegDir, cfg);
 else
     write_log(logFile, '  流场已存在，跳过');
@@ -255,7 +265,7 @@ fprintf('\n--- Step 10: Normalize ---\n');
 
 [~, funBase_Ro] = fileparts(funNii_Ro);
 funNii_W = fullfile(cfg.funImgARWDir, ['w' funBase_Ro '.nii']);
-if ~exist(funNii_W, 'file')
+if shouldRun(funNii_W)
     funNii_W = normalize_apply(funNii_Ro, flowFile, cfg.funImgARWDir, cfg.normalize);
 else
     write_log(logFile, '  已存在，跳过');
@@ -270,7 +280,7 @@ fprintf('\n--- Step 11: Smooth ---\n');
 
 [~, funBase_W] = fileparts(funNii_W);
 funNii_S = fullfile(cfg.funImgARWSDir, ['s' funBase_W '.nii']);
-if ~exist(funNii_S, 'file')
+if shouldRun(funNii_S)
     funNii_S = smooth_3d(funNii_W, cfg.funImgARWSDir, cfg.fwhm);
 else
     write_log(logFile, '  已存在，跳过');
@@ -284,7 +294,7 @@ write_log(logFile, 'Step12: 一阶 GLM');
 fprintf('\n--- Step 12: 1st-level GLM ---\n');
 
 spmMat = fullfile(cfg.firstLevelDir, 'SPM.mat');
-if ~exist(spmMat, 'file')
+if shouldRun(spmMat)
     run_firstlevel_glm(funNii_S, rpFile, cfg.firstLevelDir, cfg);
 else
     write_log(logFile, '  SPM.mat 已存在，跳过');
