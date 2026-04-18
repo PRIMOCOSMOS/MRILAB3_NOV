@@ -51,7 +51,12 @@ lines{end+1} = sprintf('[template] T1:       %s', getfield_safe(cfg, {'templateR
 lines{end+1} = sprintf('[template] RendererMAT:%s', getfield_safe(cfg, {'templateResolution','spmRenderTemplateMat'})); %#ok<AGROW>
 
 if isfield(cfg, 'templateResolution')
-    lines{end+1} = sprintf('[template] SPM roots scanned: %s', strjoin(cfg.templateResolution.spmRootsScanned, ' | ')); %#ok<AGROW>
+    roots = cfg.templateResolution.spmRootsScanned;
+    if iscell(roots) && ~isempty(roots)
+        lines{end+1} = sprintf('[template] SPM roots scanned: %s', strjoin(roots, ' | ')); %#ok<AGROW>
+    else
+        lines{end+1} = '[template] SPM roots scanned: none'; %#ok<AGROW>
+    end
 end
 
 ensure_dir(fileparts(reportFile));

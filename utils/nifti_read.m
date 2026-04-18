@@ -241,6 +241,7 @@ function affine = analyze75_affine_from_originator(hdrFile, hdr, byteOrder)
 % analyze75_affine_from_originator - 从 Analyze 7.5 头的 originator 字段重建仿射矩阵
 %
 % Analyze 7.5 数据结构（来自 DBIRTH 格式规范）:
+%   以下字节号均为“相对文件起始位置”的绝对字节号（0-based）
 %   data_history 起始于字节 148
 %   hist.originator 位于字节 253，为 5 个 int16（10字节）
 %     originator[0..2] = x,y,z 原点体素坐标（1-based）
@@ -291,8 +292,9 @@ end
 
 % SPM Analyze 7.5 横断位（orient=0）默认 LAS 坐标系：x 轴取反
 % 原点体素 (ox,oy,oz) 对应世界坐标 (0,0,0)。
-% 这里使用 (oy-1)/(oz-1) 是因为仿射矩阵按 0-based 体素索引建模：
-% 当 1-based 体素索引转为 0-based 后，位移应减去 1 个体素。
+% 这里 y/z 使用 (o-1) 是因为仿射矩阵按 0-based 体素索引建模。
+% x 方向采用 dx*ox（而非 dx*(ox-1)）是沿用 SPM 处理 Analyze 头的约定，
+% 与其默认 LAS 方向定义（x 轴取反）保持一致。
 affine = [-dx  0   0   dx*ox;
            0  dy   0  -dy*(oy-1);
            0   0  dz  -dz*(oz-1);
