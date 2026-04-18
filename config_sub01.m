@@ -51,7 +51,7 @@ cfg.outDirs = { ...
 %   DPABI: D:\DPABI_V9.0_250415
 %   SPM25: D:\spm25
 cfg.installPaths.dpabiRoot = 'D:\DPABI_V9.0_250415';
-cfg.installPaths.spmRoot   = 'D:\spm25';              % 优先 SPM25
+cfg.installPaths.spmRoot   = 'D:\spm';              % 优先 SPM25
 cfg.installPaths.spmFallbackRoots = {'D:\spm'};       % 兼容旧安装路径
 %
 % ── DARTEL 模板 ──────────────────────────────────────────────────────
