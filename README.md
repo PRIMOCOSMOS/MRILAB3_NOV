@@ -102,7 +102,7 @@ cd('path/to/MRILAB3_NOV');
 run_pipeline_sub01;
 ```
 
-所有步骤会自动按序执行，中间产物保存到各输出目录。若某步骤输出已存在则跳过。
+所有步骤会自动按序执行，中间产物保存到各输出目录。默认每次均全流程重算（`cfg.pipeline.forceRerun = true`），不因已有输出而跳过。
 启动时还会生成 `parity_audit_*.txt`，用于对照 SPM25/DPABI 的逻辑级流程审计。
 
 ---
