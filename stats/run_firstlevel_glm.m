@@ -208,7 +208,7 @@ while true
     end
 
     bestCol = 0;
-    bestRank = -Inf;
+    bestRank = -1;
     canDrop = nuisance(keepMask(nuisance));
     for i = 1:numel(canDrop)
         c = canDrop(i);
