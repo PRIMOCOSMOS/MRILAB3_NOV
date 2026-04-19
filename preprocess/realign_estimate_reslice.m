@@ -226,7 +226,10 @@ if finiteRatio < 1
 end
 sampleVol = double(dataR(:,:,:,max(1, round(nt/2))));
 volStd = std(sampleVol(:));
-if volStd < 1e-6
+% 经验阈值：float32 数据在正常 fMRI 强度范围下，体数据标准差远大于 1e-6；
+% 该阈值仅用于捕获“近乎常数图像（纯白/纯黑）”这类明显失败情形。
+MIN_ACCEPTABLE_STD = 1e-6;
+if volStd < MIN_ACCEPTABLE_STD
     error('[realign] 重采样结果近似常数图像 (std=%.3e)，请检查配准参数与坐标变换', volStd);
 end
 end
