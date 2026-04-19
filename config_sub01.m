@@ -49,17 +49,18 @@ cfg.outDirs = { ...
 % 安装目录（用于自动推断模板路径）
 % 用户本机常见路径：
 %   DPABI: D:\DPABI_V9.0_250415
-%   SPM25: D:\spm25
+%   SPM25: D:\spm
 cfg.installPaths.dpabiRoot = 'D:\DPABI_V9.0_250415';
-cfg.installPaths.spmRoot   = 'D:\spm25';              % 优先 SPM25
-cfg.installPaths.spmFallbackRoots = {'D:\spm'};       % 兼容旧安装路径
+cfg.installPaths.spmRoot   = 'D:\spm';                % 优先使用用户本机 SPM25 路径
+cfg.installPaths.spmFallbackRoots = {'D:\spm25'};     % 兼容其他命名
 %
 % ── DARTEL 模板 ──────────────────────────────────────────────────────
 %   本 pipeline 为单被试模式，无法自建群组级 DARTEL 模板（DPABI 中
 %   "DARTEL: Create Template" 需多被试联合）。
-%   推荐使用 SPM DARTEL 工具箱自带的 IXI555 MNI152 人群模板，即：
+%   优先使用 SPM DARTEL 工具箱模板（若存在）：
 %     <spm安装目录>/toolbox/DARTEL/Template_6_IXI555_MNI152.nii
-%   该文件是 SPM12 DARTEL 工具箱的标准配置文件。
+%   若该文件不存在，启动时会自动回退扫描：
+%     Template_6.nii 或 <spm安装目录>/tpm/TPM.nii
 %   若需使用东亚人模板（提高中国受试者的分割精度），可替换为
 %   由多名被试自建的 Template_6.nii，路径同样配置于此处。
 %   DARTEL 模板支持两种配置方式:
@@ -95,6 +96,10 @@ cfg.visualization.brainTemplateNii = cfg.templates.standard.t1TemplateNii;
 
 % 参考流程一致性审计（对照 SPM25/DPABI 逻辑级流程）
 cfg.referenceAudit.strict = false;  % true 时若关键流程缺失将 fail-fast
+
+% ====== Pipeline 执行策略 ======
+% true: 每次运行都从头重算，不因已有输出文件而跳过步骤
+cfg.pipeline.forceRerun = true;
 
 % ====== EPI/MOSAIC 扫描参数 ======
 cfg.TR          = 2.0;      % 重复时间 (秒)

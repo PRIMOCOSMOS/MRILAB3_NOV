@@ -29,7 +29,7 @@ MRILAB3_NOV/
 │   ├── remove_dummy_tr.m         % 去除起始不稳定 TR
 │   ├── slice_timing_corr.m       % 切片时序校正（傅里叶时移）
 │   ├── realign_estimate_reslice.m% 头动校正（Gauss-Newton）+ rp_*.txt
-│   ├── reorient_set_origin.m     % 坐标原点重定位到 AC
+│   ├── reorient_set_origin.m     % 三正交视图点选 AC 后重定位坐标原点
 │   ├── brain_extract_t1.m        % T1 脑提取（BET）
 │   ├── coreg_t1_to_fun.m         % T1 配准到功能像（互信息）
 │   ├── segment_tissue.m          % GMM 组织分割（GM/WM/CSF）
@@ -75,15 +75,15 @@ cfg.cond.durations = {30*ones(1,5),        30*ones(1,5)};
 
 ```matlab
 cfg.installPaths.dpabiRoot = 'D:\DPABI_V9.0_250415';
-cfg.installPaths.spmRoot   = 'D:\spm25';              % 优先 SPM25
-cfg.installPaths.spmFallbackRoots = {'D:\spm'};       % 可选回退
+cfg.installPaths.spmRoot   = 'D:\spm';                % 优先 SPM25
+cfg.installPaths.spmFallbackRoots = {'D:\spm25'};     % 可选回退
 
-cfg.templates.dartel.template4DNii = 'D:\spm25\toolbox\DARTEL\Template_6_IXI555_MNI152.nii';
+cfg.templates.dartel.template4DNii = 'D:\spm\toolbox\DARTEL\Template_6_IXI555_MNI152.nii'; % 若不存在将自动回退 Template_6.nii 或 tpm/TPM.nii
 cfg.templates.dartel.gmVolumeIndex = 1; % 第1帧=GM
 cfg.templates.dartel.wmVolumeIndex = 2; % 第2帧=WM
 cfg.templates.standard.brainMaskNii = 'D:\DPABI_V9.0_250415\Templates\BrainMask_05_91x109x91.hdr'; % Analyze(.hdr/.img)
 cfg.templates.standard.t1TemplateNii = 'D:\DPABI_V9.0_250415\Templates\ch2.nii';
-cfg.visualization.spmRenderTemplateMat = 'D:\spm25\rend\render_single_subj.mat'; % 仅参考SPM渲染逻辑
+cfg.visualization.spmRenderTemplateMat = 'D:\spm\rend\render_single_subj.mat'; % 仅参考SPM渲染逻辑
 cfg.visualization.brainTemplateNii = cfg.templates.standard.t1TemplateNii;
 ```
 
@@ -102,7 +102,7 @@ cd('path/to/MRILAB3_NOV');
 run_pipeline_sub01;
 ```
 
-所有步骤会自动按序执行，中间产物保存到各输出目录。若某步骤输出已存在则跳过。
+所有步骤会自动按序执行，中间产物保存到各输出目录。默认每次均全流程重算（`cfg.pipeline.forceRerun = true`），不因已有输出而跳过。
 启动时还会生成 `parity_audit_*.txt`，用于对照 SPM25/DPABI 的逻辑级流程审计。
 
 ---
@@ -115,7 +115,7 @@ run_pipeline_sub01;
 | 02 | 去除 Dummy TR | FunImg | FunImgA |
 | 03 | Slice Timing 校正 | FunImgA | FunImgA（st前缀）|
 | 04 | 头动校正（Realign）| FunImgA | FunImgAR + RealignParameter |
-| 05 | 重定位（Reorient）| FunImgAR / T1Img | 原目录（reorient前缀）|
+| 05 | 重定位（Reorient，三视图点选AC）| FunImgAR / T1Img | 原目录（reorient前缀）|
 | 06 | T1 脑提取（BET） | T1Img（reorient后） | T1ImgBet |
 | 07 | T1 配准到 Fun | T1ImgBet | T1ImgCoreg |
 | 08 | 组织分割 | T1ImgCoreg | T1ImgNewSegment |
@@ -131,6 +131,7 @@ run_pipeline_sub01;
 
 - `FunImgARWS/s*.nii` — 预处理完成的4D功能像（MNI空间，平滑后）
 - `RealignParameter/rp_Sub_01.txt` — 头动参数（nT×6，单位：mm/rad）
+- `FunImgAR/meanstabold_4d.nii`（或对应前缀）— Realign 后均值像（用于 QC，对齐 SPM 常见输出）
 - `T1ImgBet/bet_reorient_*.nii` — BET 后的 T1 结构像
 - `T1ImgBet/betmask_reorient_*.nii` — BET 生成的脑掩模
 - `T1ImgNewSegment/c1_t1.nii` — CSF 概率图

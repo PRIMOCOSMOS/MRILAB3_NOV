@@ -155,6 +155,15 @@ hdr.descrip = 'Realigned';
 outFile = fullfile(outDir, ['r' fname ext]);
 nifti_write(outFile, single(dataR), hdr);
 fprintf('[realign] 重采样完成: %s\n', outFile);
+
+% 与 SPM 行为对齐：额外写出 mean 图像，便于 QC 与后续流程对照
+hdrMean = hdr;
+hdrMean.nt = 1;
+hdrMean.dim = int16([3, nx, ny, nz, 1, 1, 1, 1]);
+hdrMean.descrip = 'MeanRealigned';
+meanFile = fullfile(outDir, ['mean' fname ext]);
+nifti_write(meanFile, single(mean(dataR, 4)), hdrMean);
+fprintf('[realign] 均值像已写出: %s\n', meanFile);
 end
 
 % ======================================================================
@@ -208,5 +217,19 @@ for t = 1:nt
 
     vals = trilinear_interp(double(data(:,:,:,t)), curCoords(1:3,:));
     dataR(:,:,:,t) = single(reshape(vals, nx, ny, nz));
+end
+
+% 基本质量控制：防止重采样后出现“纯白/近常数/非有限值”异常
+finiteRatio = nnz(isfinite(dataR)) / numel(dataR);
+if finiteRatio < 1
+    error('[realign] 重采样结果包含非有限值 (finiteRatio=%.6f)，请检查配准变换', finiteRatio);
+end
+sampleVol = double(dataR(:,:,:,max(1, round(nt/2))));
+volStd = std(sampleVol(:));
+% 经验阈值：float32 数据在正常 fMRI 强度范围下，体数据标准差远大于 1e-6；
+% 该阈值仅用于捕获“近乎常数图像（纯白/纯黑）”这类明显失败情形。
+MIN_ACCEPTABLE_STD = 1e-6;
+if volStd < MIN_ACCEPTABLE_STD
+    error('[realign] 重采样结果近似常数图像 (std=%.3e)，请检查配准参数与坐标变换', volStd);
 end
 end

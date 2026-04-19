@@ -49,6 +49,9 @@ res = Y - X * beta;  % [nScans × nVox]
 
 % -------- 方差估计 --------
 df      = nScans - rankX;  % 自由度
+if df <= 0
+    error('[glm_ols] 自由度无效 (nScans=%d, rank=%d)，请检查设计矩阵设置', nScans, rankX);
+end
 sigma2  = sum(res.^2, 1) / df;  % [1 × nVox]
 sigma2  = max(sigma2, 1e-12);   % 防止零方差
 
