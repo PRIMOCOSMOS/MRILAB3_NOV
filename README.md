@@ -131,6 +131,7 @@ run_pipeline_sub01;
 
 - `FunImgARWS/s*.nii` — 预处理完成的4D功能像（MNI空间，平滑后）
 - `RealignParameter/rp_Sub_01.txt` — 头动参数（nT×6，单位：mm/rad）
+- `FunImgAR/meanstabold_4d.nii`（或对应前缀）— Realign 后均值像（用于 QC，对齐 SPM 常见输出）
 - `T1ImgBet/bet_reorient_*.nii` — BET 后的 T1 结构像
 - `T1ImgBet/betmask_reorient_*.nii` — BET 生成的脑掩模
 - `T1ImgNewSegment/c1_t1.nii` — CSF 概率图

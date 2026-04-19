@@ -44,8 +44,8 @@ allNames = [condNames(1:nConds), rpNames, condNames(nConds+1:end)];
 protectIdx = 1:nConds;  % 任务条件列必须保留
 if isfield(cfg, 'tcons') && isfield(cfg.tcons, 'weight')
     c = cfg.tcons.weight(:);
-    nz = find(abs(c) > 0);
-    protectIdx = unique([protectIdx(:); nz(:)]);
+    cIdxNonZero = find(abs(c) > 0);
+    protectIdx = unique([protectIdx(:); cIdxNonZero(:)]);
     protectIdx = protectIdx(protectIdx >= 1 & protectIdx <= size(X,2))';
 end
 [X, allNames] = enforce_fullrank_design(X, allNames, protectIdx);
@@ -106,6 +106,9 @@ if ~any(brainMask(:))
     brainMask = meanVol > thresh;
 end
 nVox = sum(brainMask(:));
+if ~isscalar(nx) || ~isscalar(ny) || ~isscalar(nz) || ~isscalar(nScans)
+    error('[run_firstlevel_glm] 数据维度异常（非标量），请检查上游变量覆盖');
+end
 fprintf('[run_firstlevel_glm] 脑掩模体素数: %d / %d\n', nVox, nx*ny*nz);
 
 % -------- 展平脑内体素: [nScans × nVox] --------
