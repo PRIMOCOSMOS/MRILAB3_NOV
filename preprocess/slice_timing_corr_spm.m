@@ -42,10 +42,14 @@ sliceOrderOrTimes = double(sliceTimingMs(:)');
 refSliceTimeMs = double(sliceTimingMs(refSliceIdx));
 timing = [0, TR];
 
+outFile = fullfile(outDir, ['st' inBase inExt]);
+if exist(outFile, 'file')
+    delete(outFile);
+end
+
 fprintf('[slice_timing_corr_spm] 使用 SPM Slice Timing: nVol=%d, refSlice=%d\n', nVol, refSliceIdx);
 spm_slice_timing(char(scans), sliceOrderOrTimes, refSliceTimeMs, timing, 'st');
 
-outFile = fullfile(outDir, ['st' inBase inExt]);
 if ~exist(outFile, 'file')
     error('[slice_timing_corr_spm] 未生成输出文件: %s', outFile);
 end

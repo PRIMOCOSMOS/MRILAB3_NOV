@@ -168,14 +168,44 @@ spm('defaults', 'FMRI');
 spm_jobman('initcfg');
 
 ensure_dir(outDir);
+cleanup_dartel_outputs(outDir);
 rc1File = infer_rc_file(gmFile, 1);
 rc2File = infer_rc_file(wmFile, 2);
 
+matlabbatch = build_dartel_batch(rc1File, rc2File, cfg);
+
+spm_jobman('run', matlabbatch);
+
+uFiles = dir(fullfile(outDir, 'u_rc1*.nii'));
+if isempty(uFiles)
+    error('[dartel_warp] 未找到 SPM 输出流场 u_rc1*.nii: %s', outDir);
+end
+
+[~, idx] = max([uFiles.datenum]);
+flowField = fullfile(uFiles(idx).folder, uFiles(idx).name);
+warpedGM = '';
+
+fprintf('[dartel_warp][SPM] 流场: %s\n', flowField);
+end
+
+function matlabbatch = build_dartel_batch(rc1File, rc2File, cfg)
+% 优先使用 DPABI 官方 Jobmat，避免参数漂移；不存在则回退 SPM 默认参数
+jobmatFile = resolve_dpabi_dartel_jobmat(cfg);
+if ~isempty(jobmatFile) && exist(jobmatFile, 'file')
+    S = load(jobmatFile);
+    if isfield(S, 'matlabbatch') && iscell(S.matlabbatch) && ~isempty(S.matlabbatch)
+        matlabbatch = S.matlabbatch;
+        matlabbatch{1}.spm.tools.dartel.warp.images{1,1} = {rc1File};
+        matlabbatch{1}.spm.tools.dartel.warp.images{1,2} = {rc2File};
+        fprintf('[dartel_warp][SPM] 使用 DPABI Jobmat: %s\n', jobmatFile);
+        return;
+    end
+    warning('[dartel_warp] DPABI Jobmat 缺少 matlabbatch，回退默认参数: %s', jobmatFile);
+end
+
 matlabbatch = {};
-matlabbatch{1}.spm.tools.dartel.warp.images = {
-    {rc1File}
-    {rc2File}
-};
+matlabbatch{1}.spm.tools.dartel.warp.images{1,1} = {rc1File};
+matlabbatch{1}.spm.tools.dartel.warp.images{1,2} = {rc2File};
 matlabbatch{1}.spm.tools.dartel.warp.settings.template = 'Template';
 matlabbatch{1}.spm.tools.dartel.warp.settings.rform = 0;
 
@@ -212,19 +242,39 @@ matlabbatch{1}.spm.tools.dartel.warp.settings.param(6).slam = 0.5;
 matlabbatch{1}.spm.tools.dartel.warp.settings.optim.lmreg = 0.01;
 matlabbatch{1}.spm.tools.dartel.warp.settings.optim.cyc = 3;
 matlabbatch{1}.spm.tools.dartel.warp.settings.optim.its = 3;
-
-spm_jobman('run', matlabbatch);
-
-uFiles = dir(fullfile(outDir, 'u_rc1*.nii'));
-if isempty(uFiles)
-    error('[dartel_warp] 未找到 SPM 输出流场 u_rc1*.nii: %s', outDir);
+fprintf('[dartel_warp][SPM] 使用内置默认 DARTEL 参数\n');
 end
 
-[~, idx] = max([uFiles.datenum]);
-flowField = fullfile(uFiles(idx).folder, uFiles(idx).name);
-warpedGM = '';
+function jobmatFile = resolve_dpabi_dartel_jobmat(cfg)
+jobmatFile = '';
+dpabiRoot = '';
 
-fprintf('[dartel_warp][SPM] 流场: %s\n', flowField);
+if isstruct(cfg) && isfield(cfg, 'installPaths') && isfield(cfg.installPaths, 'dpabiRoot') && ...
+        ~isempty(cfg.installPaths.dpabiRoot)
+    dpabiRoot = cfg.installPaths.dpabiRoot;
+end
+if isempty(dpabiRoot)
+    dpabiRoot = 'D:/DPABI_V9.0_250415';
+end
+
+cand = fullfile(dpabiRoot, 'DPARSF', 'Jobmats', 'Dartel_CreateTemplate.mat');
+if exist(cand, 'file')
+    jobmatFile = cand;
+end
+end
+
+function cleanup_dartel_outputs(outDir)
+patterns = {'Template_*.nii', 'Template_*.mat', 'u_rc1*.nii'};
+for i = 1:numel(patterns)
+    files = dir(fullfile(outDir, patterns{i}));
+    for k = 1:numel(files)
+        try
+            delete(fullfile(files(k).folder, files(k).name));
+        catch
+            % Ignore locked files; SPM will overwrite when possible.
+        end
+    end
+end
 end
 
 function rcFile = infer_rc_file(cFile, tissueIdx)

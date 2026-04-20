@@ -10,7 +10,7 @@ fMRI-BOLD 数据分析Pipeline采用双阶段目标推进：
 第二阶段，在第一阶段复现成功后，再逐步拆解并移植核心算法与处理逻辑，最终实现Standalone版本并达到与Gold Standard的高相似度。
 
 本地具有MATLAB，SPM25和DPABI的环境可以调用，也有由原数据通过运行这两个软件得到的示例处理结果。MATLAB环境已配置MCP; SPM25和DPABI的路径分别是：
-SPM25："D:\Coding2"；DPABI："D:\DPABI_V9.0_250415"。同时，我的示例数据(Gold Standard)位于"D:\MRI_PRO\MRILAB3\BOLDDATA"下，其中文件夹F1Raw和FunRaw是原始的数据。
+SPM25："D:\spm"；DPABI："D:\DPABI_V9.0_250415"。同时，我的示例数据(Gold Standard)位于"D:\MRI_PRO\MRILAB3\BOLDDATA"下，其中文件夹F1Raw和FunRaw是原始的数据。
 "D:\MRI_PRO\MRILAB3\BOLDCODE\BOLDDATA"下是本库运行得到的测试数据处理结果，也是我们优化的目标。
 
 我们的大致思路分两步：
@@ -55,4 +55,4 @@ SPM25："D:\Coding2"；DPABI："D:\DPABI_V9.0_250415"。同时，我的示例数
 - **Sub01_1stLevel**：存放基于预处理终产物（`FunImgARWS`）完成的单被试个体水平一般线性模型（GLM）统计结果。
 - **Sub01_1stLevel_StandaloneCheck**：存放个体水平统计模型设置或设计矩阵的独立验证与辅助检查文件。
 
-当前主要目标：先尝试通过代码调用SPM25和DPABI功能复现整个pipeline，确认可复现Gold Standard；复现稳定后，再进入算法/逻辑移植实现阶段，最终达到与Gold Standard的高相似度。
+当前主要目标：先尝试通过代码调用SPM25和DPABI功能复现整个pipeline，确认可复现Gold Standard；复现稳定后，再进入算法/逻辑移植实现阶段，最终达到与Gold Standard的高相似度。注意，"D:\MRI_PRO\MRILAB3\BOLDDATA\Sub01_1stLevel\SPM.mat"中封装了彼时运行SPM的所有配置，要根据这一点调用SPM25的相关函数，确保参数和流程的一致性，从而更加可靠地进行复现工作。

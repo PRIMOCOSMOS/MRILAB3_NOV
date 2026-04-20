@@ -1,8 +1,8 @@
 function audit = audit_pipeline_parity(cfg, pipelineDir, reportFile)
 % audit_pipeline_parity - 对照 SPM/DPABI 关键流程做一致性审计（逻辑级）
 % 说明：
-% - 本项目是 standalone 实现，不调用 SPM/DPABI 内核函数
-% - 该审计用于核对“处理流程与输入输出逻辑”是否与开源库一致
+% - 当前项目优先走 SPM/DPABI 外部调用分支
+% - 该审计用于核对“处理流程与参数口径”是否与开源库一致
 % - 若 strict=true 且发现关键缺失，将报错退出
 
 if nargin < 3 || isempty(reportFile)

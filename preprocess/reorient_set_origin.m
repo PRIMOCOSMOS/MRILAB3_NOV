@@ -1,4 +1,4 @@
-function outFile = reorient_set_origin(inFile, outDir, acVoxCoord)
+function outFile = reorient_set_origin(inFile, outDir, acVoxCoord, cfg, modality)
 % reorient_set_origin - 通过修改 NIfTI 仿射矩阵将坐标原点平移到前连合（AC）
 %
 % 物理背景:
@@ -19,6 +19,18 @@ function outFile = reorient_set_origin(inFile, outDir, acVoxCoord)
 %
 % 输出:
 %   outFile - 重定位后的 NIfTI 文件路径（前缀 'reorient_'）
+
+if nargin < 4
+    cfg = struct();
+end
+if nargin < 5
+    modality = '';
+end
+
+if use_spm_reorient_backend(cfg)
+    outFile = reorient_set_origin_spm(inFile, outDir, cfg, modality);
+    return;
+end
 
 fprintf('[reorient_set_origin] 读取: %s\n', inFile);
 [data, hdr] = nifti_read(inFile);
@@ -309,4 +321,9 @@ switch lower(mode)
     otherwise
         error('extract_slice_2d: 未知 mode=%s', mode);
 end
+end
+
+function tf = use_spm_reorient_backend(cfg)
+tf = isstruct(cfg) && isfield(cfg, 'reorient') && ...
+    isfield(cfg.reorient, 'useSpmMatrix') && logical(cfg.reorient.useSpmMatrix);
 end

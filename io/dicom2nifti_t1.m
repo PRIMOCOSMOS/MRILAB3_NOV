@@ -1,4 +1,4 @@
-function outFile = dicom2nifti_t1(dicomDir, outDir)
+function outFile = dicom2nifti_t1(dicomDir, outDir, cfg)
 % dicom2nifti_t1 - 将 T1 结构像 DICOM 序列转换为 3D NIfTI
 % 每个 DICOM 文件对应一个 2D 切片，按层位置排序后重组为 3D 体
 % 完全 standalone，使用 MATLAB 内置 dicominfo/dicomread
@@ -9,6 +9,15 @@ function outFile = dicom2nifti_t1(dicomDir, outDir)
 %
 % 输出:
 %   outFile  - 输出 3D NIfTI 文件路径 (t1.nii)
+
+if nargin < 3
+    cfg = struct();
+end
+
+if use_dpabi_dicom_backend(cfg)
+    outFile = dicom2nifti_t1_dpabi(dicomDir, outDir, cfg);
+    return;
+end
 
 fprintf('[dicom2nifti_t1] 开始处理 T1 DICOM 目录: %s\n', dicomDir);
 
@@ -204,3 +213,8 @@ for oldAxis = 1:3
     end
 end
 end
+
+    function tf = use_dpabi_dicom_backend(cfg)
+    tf = isstruct(cfg) && isfield(cfg, 'dpabi') && ...
+        isfield(cfg.dpabi, 'useDicomConvert') && logical(cfg.dpabi.useDicomConvert);
+    end

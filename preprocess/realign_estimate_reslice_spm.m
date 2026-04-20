@@ -44,6 +44,15 @@ if ~isfield(eflags, 'PW'),     eflags.PW = ''; end
 fprintf('[realign_estimate_reslice_spm] 使用 SPM Realign Estimate\n');
 spm_realign(V, eflags);
 
+outFile = fullfile(outDir, ['r' inBase inExt]);
+if exist(outFile, 'file')
+    delete(outFile);
+end
+meanFile = fullfile(outDir, ['mean' inBase inExt]);
+if exist(meanFile, 'file')
+    delete(meanFile);
+end
+
 rflags = struct();
 rflags.interp = 4;
 rflags.wrap = [0 0 0];
@@ -54,7 +63,6 @@ rflags.prefix = 'r';
 fprintf('[realign_estimate_reslice_spm] 使用 SPM Reslice\n');
 spm_reslice(V, rflags);
 
-outFile = fullfile(outDir, ['r' inBase inExt]);
 if ~exist(outFile, 'file')
     error('[realign_estimate_reslice_spm] 未生成重采样输出: %s', outFile);
 end

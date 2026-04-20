@@ -1,4 +1,4 @@
-function outFile = remove_dummy_tr(inFile, outDir, nDummy)
+function outFile = remove_dummy_tr(inFile, outDir, nDummy, cfg)
 % remove_dummy_tr - 去除 4D fMRI 数据中起始不稳定的 TR（Dummy Scans）
 %
 % 物理背景:
@@ -15,6 +15,15 @@ function outFile = remove_dummy_tr(inFile, outDir, nDummy)
 %
 % 输出:
 %   outFile - 输出 NIfTI 文件路径（前缀 'a' 表示 after dummy removal）
+
+if nargin < 4
+    cfg = struct();
+end
+
+if use_spm_functional_backend(cfg)
+    outFile = remove_dummy_tr_spm(inFile, outDir, nDummy, cfg);
+    return;
+end
 
 fprintf('[remove_dummy_tr] 读取: %s\n', inFile);
 [data, hdr] = nifti_read(inFile);
@@ -43,4 +52,9 @@ ensure_dir(outDir);
 outFile = fullfile(outDir, ['a' fname ext]);
 nifti_write(outFile, single(dataOut), hdr);
 fprintf('[remove_dummy_tr] 已写出: %s\n', outFile);
+end
+
+function tf = use_spm_functional_backend(cfg)
+tf = isstruct(cfg) && isfield(cfg, 'spm') && ...
+    isfield(cfg.spm, 'useFunctional') && logical(cfg.spm.useFunctional);
 end

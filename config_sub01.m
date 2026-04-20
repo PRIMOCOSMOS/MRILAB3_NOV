@@ -9,6 +9,12 @@ function cfg = config_sub01()
 cfg.baseDir  = 'D:\MRI_PRO\MRILAB3\BOLDCODE\BOLDDATA';
 cfg.subID    = 'Sub_01';
 
+% Gold 基线目录与参数快照（DPARSFA_AutoSave_*.mat）
+cfg.gold.baseDir = 'D:\MRI_PRO\MRILAB3\BOLDDATA';
+cfg.gold.autoLoadSnapshot = true;
+cfg.gold.snapshotFile = '';
+cfg.gold.firstLevelSPMMat = fullfile(cfg.gold.baseDir, 'Sub01_1stLevel', 'SPM.mat');
+
 % 原始数据路径
 cfg.funRawDir = fullfile(cfg.baseDir, 'FunRaw', cfg.subID);
 cfg.t1RawDir  = fullfile(cfg.baseDir, 'T1Raw',  cfg.subID);
@@ -54,6 +60,14 @@ cfg.installPaths.dpabiRoot = 'D:\DPABI_V9.0_250415';
 cfg.installPaths.spmRoot   = 'D:\spm';                % 优先使用用户本机 SPM25 路径
 cfg.installPaths.spmFallbackRoots = {'D:\spm25'};     % 兼容其他命名
 
+% DPABI dcm2niix（用于 DICOM->NIfTI）
+cfg.dpabi.useDicomConvert = true;
+cfg.dpabi.dcm2niixExeCandidates = { ...
+    fullfile(cfg.installPaths.dpabiRoot, 'DPARSF', 'dcm2nii', 'dcm2niix.exe'), ...
+    'D:\SRTP\MRIcron\Resources\dcm2niix.exe'};
+cfg.dpabi.dcm2niixOptionFun = '-b y -x y -z n';
+cfg.dpabi.dcm2niixOptionT1  = '-b y -x y -z n';
+
 % 结构链路后端：true=使用 SPM 默认实现（coreg/new-segment/dartel/normalize）
 cfg.spm.useStructural = true;
 % 功能链路后端：true=使用 SPM 默认实现（slice-timing/realign/smooth/1st-level）
@@ -68,6 +82,9 @@ cfg.t1.dcm2niixExeCandidates = { ...
 
 % Coreg 模式：'identity' 保持几何不变（Gold-parity），'estimate' 使用 SPM 估计
 cfg.coreg.mode = 'identity';
+
+% 重定位：优先使用 Gold ReorientMats 中矩阵（通过 SPM 仿射写回）
+cfg.reorient.useSpmMatrix = true;
 %
 % ── DARTEL 模板 ──────────────────────────────────────────────────────
 %   本 pipeline 为单被试模式，无法自建群组级 DARTEL 模板（DPABI 中
@@ -163,6 +180,7 @@ cfg.bet.spmProbScale = 200;
 cfg.seg.nClasses  = 3;    % 分割类别数 (GM, WM, CSF)
 cfg.seg.nIter     = 100;  % GMM EM 最大迭代次数
 cfg.seg.mrfBeta   = 0.1;  % MRF 正则化系数 (0 = 不使用 MRF)
+cfg.seg.affreg    = 'mni'; % SPM New Segment affine regularisation
 
 % ====== 非线性配准（DARTEL 替代）======
 cfg.dartel.nLevels  = 4;            % 多分辨率层数
@@ -195,6 +213,8 @@ cfg.glm.useAR1Whitening       = true;  % 串行相关修正（SPM一阶默认近
 cfg.glm.maskMethod            = 'globalFraction'; % 'percentile' | 'globalFraction'
 cfg.glm.maskGlobalFraction    = 0.50;  % meanVol > 0.5 * globalMean
 cfg.glm.explicitDriftRegressors = false; % false 时不在 X 中显式加入 DCT 漂移列
+cfg.glm.significanceP         = 0.05;  % SPM 结果阶段阈值（常用 0.05）
+cfg.glm.multipleComparisonMethods = {'FWE','FDR','none'}; % 结果报告同时输出三种校正
 
 % 任务设计（本实验协议）
 % 总 TR=156，TR=2s；去掉前6TR 后剩余 150TR（300s）

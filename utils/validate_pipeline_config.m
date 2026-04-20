@@ -10,6 +10,13 @@ for i = 1:numel(mustExistDirs)
     end
 end
 
+% -------- DPABI DICOM 转换后端检查 --------
+if isfield(cfg, 'dpabi') && isfield(cfg.dpabi, 'useDicomConvert') && logical(cfg.dpabi.useDicomConvert)
+    if ~isfield(cfg.dpabi, 'dcm2niixExeCandidates') || ~has_existing_file(cfg.dpabi.dcm2niixExeCandidates)
+        error('[validate_pipeline_config] 已启用 DPABI DICOM 转换，但未找到可用 dcm2niix 可执行文件');
+    end
+end
+
 % -------- 模板路径检查（应用级）--------
 if ~isfield(cfg, 'templates') || ~isfield(cfg.templates, 'standard')
     error('[validate_pipeline_config] 缺少 cfg.templates.standard 配置');
@@ -100,6 +107,16 @@ if useSpmStructural || useSpmFunctional
     end
     if ~exist(fullfile(cfg.spm.dir, 'spm.m'), 'file')
         error('[validate_pipeline_config] SPM 路径无效，未找到 spm.m: %s', cfg.spm.dir);
+    end
+end
+
+% -------- SPM 重定位矩阵检查 --------
+if isfield(cfg, 'reorient') && isfield(cfg.reorient, 'useSpmMatrix') && logical(cfg.reorient.useSpmMatrix)
+    if ~isfield(cfg.reorient, 'funMatFile') || ~exist(cfg.reorient.funMatFile, 'file')
+        error('[validate_pipeline_config] 启用 SPM 重定位矩阵时，funMatFile 不存在');
+    end
+    if ~isfield(cfg.reorient, 't1MatFile') || ~exist(cfg.reorient.t1MatFile, 'file')
+        error('[validate_pipeline_config] 启用 SPM 重定位矩阵时，t1MatFile 不存在');
     end
 end
 
@@ -211,5 +228,19 @@ if isstruct(s) && isfield(s, fieldName)
     v = s.(fieldName);
 else
     v = defaultVal;
+end
+end
+
+function tf = has_existing_file(cands)
+tf = false;
+if ~iscell(cands)
+    cands = {cands};
+end
+for i = 1:numel(cands)
+    p = cands{i};
+    if ischar(p) && ~isempty(p) && exist(p, 'file')
+        tf = true;
+        return;
+    end
 end
 end

@@ -63,6 +63,7 @@ addpath(fullfile(pipelineDir, 'visualize'));
 
 % -------- 载入配置 --------
 cfg = config_sub01();
+cfg = load_gold_snapshot_cfg(cfg);
 
 % -------- 执行策略：默认每次全流程重算，不跳过已存在结果 --------
 forceRerun = true;
@@ -90,6 +91,9 @@ end
 logFile = fullfile(cfg.logDir, sprintf('pipeline_%s.log', datestr(now,'yyyymmdd_HHMMSS')));
 write_log(logFile, '=== Pipeline 开始 ===');
 write_log(logFile, sprintf('被试: %s', cfg.subID));
+if isfield(cfg, 'gold') && isfield(cfg.gold, 'snapshotLoaded') && cfg.gold.snapshotLoaded
+    write_log(logFile, sprintf('GoldSnapshot: %s', cfg.gold.snapshotFileResolved));
+end
 
 % -------- 逻辑一致性审计（对照 SPM25/DPABI 关键流程）--------
 auditFile = fullfile(cfg.logDir, sprintf('parity_audit_%s.txt', datestr(now,'yyyymmdd_HHMMSS')));
@@ -112,7 +116,7 @@ else
 end
 
 if shouldRun(t1Nii)
-    t1Nii = dicom2nifti_t1(cfg.t1RawDir, cfg.t1ImgDir);
+    t1Nii = dicom2nifti_t1(cfg.t1RawDir, cfg.t1ImgDir, cfg);
 else
     write_log(logFile, '  T1 NIfTI 已存在，跳过');
 end
@@ -127,7 +131,7 @@ fprintf('\n--- Step 02: 去除 Dummy TR ---\n');
 
 funNii_A = fullfile(cfg.funImgADir, ['a' 'bold_4d.nii']);
 if shouldRun(funNii_A)
-    funNii_A = remove_dummy_tr(funNii, cfg.funImgADir, cfg.nDummy);
+    funNii_A = remove_dummy_tr(funNii, cfg.funImgADir, cfg.nDummy, cfg);
 else
     write_log(logFile, '  已存在，跳过');
 end
@@ -177,8 +181,13 @@ fprintf('\n--- Step 05: Reorient ---\n');
 % 功能像重定位
 [~, funBase_R] = fileparts(funNii_R);
 funNii_Ro = fullfile(cfg.funImgARDir, ['reorient_' funBase_R '.nii']);
+useSpmReorient = isfield(cfg, 'reorient') && isfield(cfg.reorient, 'useSpmMatrix') && logical(cfg.reorient.useSpmMatrix);
 if shouldRun(funNii_Ro)
-    funNii_Ro = reorient_set_origin(funNii_R, cfg.funImgARDir, []);
+    if useSpmReorient
+        funNii_Ro = reorient_set_origin_spm(funNii_R, cfg.funImgARDir, cfg, 'fun');
+    else
+        funNii_Ro = reorient_set_origin(funNii_R, cfg.funImgARDir, [], cfg, 'fun');
+    end
 else
     write_log(logFile, '  功能像重定位已存在，跳过');
 end
@@ -187,7 +196,11 @@ end
 [~, t1Base] = fileparts(t1Nii);
 t1Nii_Ro = fullfile(cfg.t1ImgDir, ['reorient_' t1Base '.nii']);
 if shouldRun(t1Nii_Ro)
-    t1Nii_Ro = reorient_set_origin(t1Nii, cfg.t1ImgDir, []);
+    if useSpmReorient
+        t1Nii_Ro = reorient_set_origin_spm(t1Nii, cfg.t1ImgDir, cfg, 't1');
+    else
+        t1Nii_Ro = reorient_set_origin(t1Nii, cfg.t1ImgDir, [], cfg, 't1');
+    end
 else
     write_log(logFile, '  T1 重定位已存在，跳过');
 end

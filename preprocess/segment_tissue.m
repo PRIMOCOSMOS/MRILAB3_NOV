@@ -200,7 +200,7 @@ end
 job.warp.mrf     = 1;
 job.warp.cleanup = 1;
 job.warp.reg     = [0 0.001 0.5 0.05 0.2];
-job.warp.affreg  = 'mni';
+job.warp.affreg  = resolve_affreg(cfg);
 job.warp.fwhm    = 0;
 job.warp.samp    = 3;
 job.warp.write   = [1 1];
@@ -237,6 +237,17 @@ elseif isstruct(cfg) && isfield(cfg, 'installPaths') && isfield(cfg.installPaths
     spmDir = cfg.installPaths.spmRoot;
 else
     spmDir = 'D:/spm';
+end
+end
+
+function affreg = resolve_affreg(cfg)
+affreg = 'mni';
+if isstruct(cfg) && isfield(cfg, 'seg') && isfield(cfg.seg, 'affreg') && ~isempty(cfg.seg.affreg)
+    affreg = lower(char(cfg.seg.affreg));
+end
+valid = {'mni', 'eastern', 'subj', 'none'};
+if ~ismember(affreg, valid)
+    affreg = 'mni';
 end
 end
 

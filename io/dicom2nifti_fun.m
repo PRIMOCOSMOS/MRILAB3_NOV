@@ -19,6 +19,11 @@ function outFile = dicom2nifti_fun(dicomDir, outDir, cfg)
 %   拼接成一幅大图（行×列各有 ceil(sqrt(nSlices)) 个子块）。
 %   本函数自动检测并解码 MOSAIC。
 
+if use_dpabi_dicom_backend(cfg)
+    outFile = dicom2nifti_fun_dpabi(dicomDir, outDir, cfg);
+    return;
+end
+
 fprintf('[dicom2nifti_fun] 开始处理 EPI DICOM 目录: %s\n', dicomDir);
 
 % -------- 收集所有 DICOM 文件 --------
@@ -240,4 +245,9 @@ R = Q44(1:3,1:3) * diag([1, -1, 1]);
 
 affine = [R, v(1:3);
           0, 0, 0, 1];
+end
+
+function tf = use_dpabi_dicom_backend(cfg)
+tf = isstruct(cfg) && isfield(cfg, 'dpabi') && ...
+    isfield(cfg.dpabi, 'useDicomConvert') && logical(cfg.dpabi.useDicomConvert);
 end

@@ -38,6 +38,11 @@ for k = 1:nVol
     scans{k} = sprintf('%s,%d', workInFile, k);
 end
 
+outFile = fullfile(outDir, ['s' inBase inExt]);
+if exist(outFile, 'file')
+    delete(outFile);
+end
+
 matlabbatch = {};
 matlabbatch{1}.spm.spatial.smooth.data = scans;
 matlabbatch{1}.spm.spatial.smooth.fwhm = double(fwhm_mm(:)');
@@ -49,7 +54,6 @@ fprintf('[smooth_3d_spm] 使用 SPM Smooth: nVol=%d, FWHM=[%.1f %.1f %.1f]\n', .
     nVol, fwhm_mm(1), fwhm_mm(2), fwhm_mm(3));
 spm_jobman('run', matlabbatch);
 
-outFile = fullfile(outDir, ['s' inBase inExt]);
 if ~exist(outFile, 'file')
     error('[smooth_3d_spm] 未生成平滑输出: %s', outFile);
 end
