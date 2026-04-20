@@ -8,6 +8,11 @@ function run_firstlevel_glm(smoothFile, rpFile, outDir, cfg)
 %   outDir     - 一阶分析输出目录（如 Sub01_1stLevel）
 %   cfg        - 配置结构体（见 config_sub01.m）
 
+if use_spm_functional_backend(cfg)
+    run_firstlevel_glm_spm(smoothFile, rpFile, outDir, cfg);
+    return;
+end
+
 fprintf('[run_firstlevel_glm] 开始一阶 GLM 分析\n');
 fprintf('[run_firstlevel_glm] 输入: %s\n', smoothFile);
 
@@ -444,4 +449,9 @@ if ~isempty(droppedCols)
     droppedTxt = strjoin(arrayfun(@(i) sprintf('%d:%s', i, names_in{i}), droppedCols, 'UniformOutput', false), ', ');
     warning('[run_firstlevel_glm] 检测到共线 nuisance 列并已移除: %s', droppedTxt);
 end
+end
+
+function tf = use_spm_functional_backend(cfg)
+tf = isstruct(cfg) && isfield(cfg, 'spm') && ...
+     isfield(cfg.spm, 'useFunctional') && logical(cfg.spm.useFunctional);
 end

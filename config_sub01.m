@@ -56,6 +56,8 @@ cfg.installPaths.spmFallbackRoots = {'D:\spm25'};     % 兼容其他命名
 
 % 结构链路后端：true=使用 SPM 默认实现（coreg/new-segment/dartel/normalize）
 cfg.spm.useStructural = true;
+% 功能链路后端：true=使用 SPM 默认实现（slice-timing/realign/smooth/1st-level）
+cfg.spm.useFunctional = true;
 cfg.spm.dir = cfg.installPaths.spmRoot;
 
 % T1 结构链路：优先使用 dcm2niix 生成的 Crop_1 作为结构输入（更接近 DPABI 语义）

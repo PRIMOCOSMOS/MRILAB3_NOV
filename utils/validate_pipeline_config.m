@@ -91,10 +91,12 @@ if cfg.visualization.enable && ~exist(cfg.visualization.brainTemplateNii, 'file'
     error('[validate_pipeline_config] visualization.brainTemplateNii 不存在: %s', cfg.visualization.brainTemplateNii);
 end
 
-% -------- SPM 结构后端检查 --------
-if isfield(cfg, 'spm') && isfield(cfg.spm, 'useStructural') && logical(cfg.spm.useStructural)
+% -------- SPM 外部后端检查（结构链路/功能链路）--------
+useSpmStructural = isfield(cfg, 'spm') && isfield(cfg.spm, 'useStructural') && logical(cfg.spm.useStructural);
+useSpmFunctional = isfield(cfg, 'spm') && isfield(cfg.spm, 'useFunctional') && logical(cfg.spm.useFunctional);
+if useSpmStructural || useSpmFunctional
     if ~isfield(cfg.spm, 'dir') || isempty(cfg.spm.dir)
-        error('[validate_pipeline_config] 已启用 SPM 结构后端，但未设置 cfg.spm.dir');
+        error('[validate_pipeline_config] 已启用 SPM 外部后端，但未设置 cfg.spm.dir');
     end
     if ~exist(fullfile(cfg.spm.dir, 'spm.m'), 'file')
         error('[validate_pipeline_config] SPM 路径无效，未找到 spm.m: %s', cfg.spm.dir);

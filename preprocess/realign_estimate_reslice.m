@@ -30,6 +30,11 @@ function [outFile, rpFile] = realign_estimate_reslice(inFile, outDir, rpDir, cfg
 %   outFile - 重采样后的 4D NIfTI（前缀 'r'）
 %   rpFile  - 头动参数文件路径（rp_*.txt，格式: nT×6）
 
+if use_spm_functional_backend(cfg)
+    [outFile, rpFile] = realign_estimate_reslice_spm(inFile, outDir, rpDir, cfg);
+    return;
+end
+
 fprintf('[realign] 读取: %s\n', inFile);
 [data, hdr] = nifti_read(inFile);
 [nx, ny, nz, nt] = size(data);
@@ -306,4 +311,9 @@ MAX_TRANS_ABS_VOX = 20;
 MAX_ROT_ABS_RAD = 0.35;
 p(1:3) = max(min(p(1:3), MAX_TRANS_ABS_VOX), -MAX_TRANS_ABS_VOX);
 p(4:6) = max(min(p(4:6), MAX_ROT_ABS_RAD), -MAX_ROT_ABS_RAD);
+end
+
+function tf = use_spm_functional_backend(cfg)
+tf = isstruct(cfg) && isfield(cfg, 'spm') && ...
+    isfield(cfg.spm, 'useFunctional') && logical(cfg.spm.useFunctional);
 end

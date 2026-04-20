@@ -1,4 +1,4 @@
-function outFile = slice_timing_corr(inFile, outDir, sliceTimingMs, refSliceIdx, TR)
+function outFile = slice_timing_corr(inFile, outDir, sliceTimingMs, refSliceIdx, TR, cfg)
 % slice_timing_corr - 基于傅里叶时移性质的切片时序校正（Slice Timing Correction）
 %
 % 物理背景:
@@ -19,6 +19,15 @@ function outFile = slice_timing_corr(inFile, outDir, sliceTimingMs, refSliceIdx,
 %
 % 输出:
 %   outFile - 输出 NIfTI 文件路径（前缀 'st' 表示 slice-timing corrected）
+
+if nargin < 6
+    cfg = struct();
+end
+
+if use_spm_functional_backend(cfg)
+    outFile = slice_timing_corr_spm(inFile, outDir, sliceTimingMs, refSliceIdx, TR, cfg);
+    return;
+end
 
 fprintf('[slice_timing_corr] 读取: %s\n', inFile);
 [data, hdr] = nifti_read(inFile);
@@ -77,4 +86,9 @@ ensure_dir(outDir);
 outFile = fullfile(outDir, ['st' fname ext]);
 nifti_write(outFile, dataOut, hdr);
 fprintf('[slice_timing_corr] 已写出: %s\n', outFile);
+end
+
+function tf = use_spm_functional_backend(cfg)
+tf = isstruct(cfg) && isfield(cfg, 'spm') && ...
+    isfield(cfg.spm, 'useFunctional') && logical(cfg.spm.useFunctional);
 end

@@ -143,7 +143,7 @@ fprintf('\n--- Step 03: Slice Timing Correction ---\n');
 funNii_ST = fullfile(cfg.funImgADir, ['st' funBase_A '.nii']);
 if shouldRun(funNii_ST)
     funNii_ST = slice_timing_corr(funNii_A, cfg.funImgADir, ...
-        cfg.sliceTimingMs, cfg.refSliceIdx, cfg.TR);
+        cfg.sliceTimingMs, cfg.refSliceIdx, cfg.TR, cfg);
 else
     write_log(logFile, '  已存在，跳过');
 end
@@ -315,7 +315,7 @@ fprintf('\n--- Step 11: Smooth ---\n');
 [~, funBase_W] = fileparts(funNii_W);
 funNii_S = fullfile(cfg.funImgARWSDir, ['s' funBase_W '.nii']);
 if shouldRun(funNii_S)
-    funNii_S = smooth_3d(funNii_W, cfg.funImgARWSDir, cfg.fwhm);
+    funNii_S = smooth_3d(funNii_W, cfg.funImgARWSDir, cfg.fwhm, cfg);
 else
     write_log(logFile, '  已存在，跳过');
 end

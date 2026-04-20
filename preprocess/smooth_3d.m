@@ -1,4 +1,4 @@
-function outFile = smooth_3d(inFile, outDir, fwhm_mm)
+function outFile = smooth_3d(inFile, outDir, fwhm_mm, cfg)
 % smooth_3d - 3D 高斯核空间平滑
 %
 % 背景:
@@ -19,6 +19,15 @@ function outFile = smooth_3d(inFile, outDir, fwhm_mm)
 %
 % 输出:
 %   outFile - 平滑后的 NIfTI 文件路径（前缀 's'）
+
+if nargin < 4
+    cfg = struct();
+end
+
+if use_spm_functional_backend(cfg)
+    outFile = smooth_3d_spm(inFile, outDir, fwhm_mm, cfg);
+    return;
+end
 
 fprintf('[smooth_3d] 读取: %s\n', inFile);
 [data, hdr] = nifti_read(inFile);
@@ -121,4 +130,9 @@ end
 
 % 恢复形状
 vol_out = ipermute(reshape(out_mat, sp), order);
+end
+
+function tf = use_spm_functional_backend(cfg)
+tf = isstruct(cfg) && isfield(cfg, 'spm') && ...
+    isfield(cfg.spm, 'useFunctional') && logical(cfg.spm.useFunctional);
 end
