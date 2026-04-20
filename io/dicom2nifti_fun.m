@@ -66,7 +66,11 @@ for t = 1:nT
     else
         % 非 MOSAIC：每个文件直接是 sliceSize×sliceSize 的2D图
         % 需要按层序号累积（此路径适用于每层一个DICOM文件的情况）
-        vol3d = reshape(img2d, sliceSize, sliceSize, 1);
+        vol3d = zeros(sliceSize, sliceSize, 1);
+        patch = img2d(1:sliceSize, 1:sliceSize);
+        % 与 MOSAIC 路径一致：先转置到 X×Y，再对 Y 轴翻转
+        vol3d(:,:,1) = patch';
+        vol3d(:,:,1) = vol3d(:, end:-1:1, 1);
     end
     vol4D(:,:,:,t) = single(vol3d);
 end
@@ -88,7 +92,7 @@ dz = sliceThick;
 dt = cfg.TR;
 
 % 图像方向：默认 LAS（左-前-上），与 DICOM 方向余弦推导
-affine = build_affine_from_dicom(info1, dx, dy, dz, sliceSize, nSlices);
+affine = build_affine_from_dicom(info1, dx, dy, dz, sliceSize, sliceSize, nSlices, isMosaic);
 
 % -------- 构建 NIfTI 头 --------
 hdr = nifti_default_hdr([sliceSize sliceSize nSlices nT], [dx dy dz dt]);
@@ -180,30 +184,60 @@ for s = 1:nSlices
         break;
     end
 
-    % 注意: DICOM 行=Y，列=X；NIfTI 习惯 X×Y，需转置
+    % 注意: DICOM 行=Y，列=X；NIfTI 习惯 X×Y，需转置。
+    % 额外对 Y 轴翻转以与 dcm2niix/SPM 生成的体素排列一致。
     patch = mosaic(row_start:row_end, col_start:col_end);
-    vol3d(:,:,s) = patch';  % 转置使 x=列, y=行
+    vol3d(:,:,s) = patch';
+    vol3d(:,:,s) = vol3d(:, end:-1:1, s);
 end
 end
 
-function affine = build_affine_from_dicom(info, dx, dy, dz, sliceSize, nSlices)
-% 从 DICOM 头的 ImageOrientationPatient 和 ImagePositionPatient 构建仿射矩阵
-% 若头信息缺失则使用默认值
+function affine = build_affine_from_dicom(info, dx, dy, dz, nx, ny, nSlices, isMosaic)
+% 从 DICOM 方向余弦构建仿射矩阵（对齐 dcm2niix 的关键顺序）:
+% 1) 在 LPS 中构建初始 Q44（row/col/slice + IPP）；
+% 2) 若为 Siemens mosaic，先施加 mosaic 平移补偿；
+% 3) LPS->RAS（翻转前两行）；
+% 4) 与像素数据一致地做 Y 翻转后的头更新（nii_flipY 等价）。
 
-F = eye(3);  % 方向余弦矩阵
+rowDir = [1; 0; 0];
+colDir = [0; 1; 0];
 if isfield(info, 'ImageOrientationPatient') && numel(info.ImageOrientationPatient) == 6
     iop = double(info.ImageOrientationPatient(:));
-    F(:,1) = iop(1:3);  % 列方向（X体素步进）
-    F(:,2) = iop(4:6);  % 行方向（Y体素步进）
-    F(:,3) = cross(iop(1:3), iop(4:6));  % 层方向
+    rowDir = iop(1:3);
+    colDir = iop(4:6);
 end
+sliceDir = cross(rowDir, colDir);
 
-% 第一层位置
-T1 = [-sliceSize/2*dx; -sliceSize/2*dy; -nSlices/2*dz];
+ipp = [0; 0; 0];
 if isfield(info, 'ImagePositionPatient') && numel(info.ImagePositionPatient) >= 3
-    T1 = double(info.ImagePositionPatient(:));
+    ipp = double(info.ImagePositionPatient(1:3));
 end
 
-affine = [F(:,1)*dx, F(:,2)*dy, F(:,3)*dz, T1;
-          0,         0,         0,          1 ];
+% 先用 DICOM LPS 坐标构建未翻转的 Q44。
+Q44 = [rowDir * dx, colDir * dy, sliceDir * dz, ipp;
+       0, 0, 0, 1];
+
+% Siemens mosaic：将起点从整幅 mosaic 左上角平移到有效切片网格中心。
+if isMosaic
+    nRowCol = ceil(sqrt(double(nSlices)));
+    xdim = nx * nRowCol;
+    ydim = ny * nRowCol;
+    if isfield(info, 'Columns') && isfield(info, 'Rows')
+        xdim = double(info.Columns);
+        ydim = double(info.Rows);
+    end
+    lFactorX = (xdim - xdim / nRowCol) / 2.0;
+    lFactorY = (ydim - ydim / nRowCol) / 2.0;
+    Q44(1:3,4) = Q44(1:3,4) + Q44(1:3,1) * lFactorX + Q44(1:3,2) * lFactorY;
+end
+
+% LPS -> RAS
+Q44(1:2,:) = -Q44(1:2,:);
+
+% 数据写出时做了 Y 轴翻转，这里同步更新头（与 dcm2niix nii_flipY 一致）。
+v = Q44 * [0; ny - 1; 0; 1];
+R = Q44(1:3,1:3) * diag([1, -1, 1]);
+
+affine = [R, v(1:3);
+          0, 0, 0, 1];
 end

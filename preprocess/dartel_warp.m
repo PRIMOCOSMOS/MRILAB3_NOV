@@ -31,6 +31,11 @@ function [flowField, warpedGM] = dartel_warp(gmFile, wmFile, outDir, cfg)
 fprintf('[dartel_warp] GM: %s\n', gmFile);
 fprintf('[dartel_warp] WM: %s\n', wmFile);
 
+if use_spm_structural_backend(cfg)
+    [flowField, warpedGM] = dartel_with_spm(gmFile, wmFile, outDir, cfg);
+    return;
+end
+
 % -------- 读取概率图 --------
 [gmData, gmHdr] = nifti_read(gmFile);
 [wmData, wmHdr] = nifti_read(wmFile);
@@ -149,6 +154,113 @@ fprintf('[dartel_warp] 形变 GM 已写出: %s\n', warpedFile);
 
 flowField = flowFile;
 warpedGM  = warpedFile;
+end
+
+function [flowField, warpedGM] = dartel_with_spm(gmFile, wmFile, outDir, cfg)
+% 使用 SPM DARTEL 默认 6 层优化设置
+spmDir = resolve_spm_dir(cfg);
+if ~exist(fullfile(spmDir, 'spm.m'), 'file')
+    error('[dartel_warp] 未找到 SPM: %s', spmDir);
+end
+
+addpath(spmDir);
+spm('defaults', 'FMRI');
+spm_jobman('initcfg');
+
+ensure_dir(outDir);
+rc1File = infer_rc_file(gmFile, 1);
+rc2File = infer_rc_file(wmFile, 2);
+
+matlabbatch = {};
+matlabbatch{1}.spm.tools.dartel.warp.images = {
+    {rc1File}
+    {rc2File}
+};
+matlabbatch{1}.spm.tools.dartel.warp.settings.template = 'Template';
+matlabbatch{1}.spm.tools.dartel.warp.settings.rform = 0;
+
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(1).its = 3;
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(1).rparam = [4 2 1e-06];
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(1).K = 0;
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(1).slam = 16;
+
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(2).its = 3;
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(2).rparam = [2 1 1e-06];
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(2).K = 0;
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(2).slam = 8;
+
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(3).its = 3;
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(3).rparam = [1 0.5 1e-06];
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(3).K = 1;
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(3).slam = 4;
+
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(4).its = 3;
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(4).rparam = [0.5 0.25 1e-06];
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(4).K = 2;
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(4).slam = 2;
+
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(5).its = 3;
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(5).rparam = [0.25 0.125 1e-06];
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(5).K = 4;
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(5).slam = 1;
+
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(6).its = 3;
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(6).rparam = [0.25 0.125 1e-06];
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(6).K = 6;
+matlabbatch{1}.spm.tools.dartel.warp.settings.param(6).slam = 0.5;
+
+matlabbatch{1}.spm.tools.dartel.warp.settings.optim.lmreg = 0.01;
+matlabbatch{1}.spm.tools.dartel.warp.settings.optim.cyc = 3;
+matlabbatch{1}.spm.tools.dartel.warp.settings.optim.its = 3;
+
+spm_jobman('run', matlabbatch);
+
+uFiles = dir(fullfile(outDir, 'u_rc1*.nii'));
+if isempty(uFiles)
+    error('[dartel_warp] 未找到 SPM 输出流场 u_rc1*.nii: %s', outDir);
+end
+
+[~, idx] = max([uFiles.datenum]);
+flowField = fullfile(uFiles(idx).folder, uFiles(idx).name);
+warpedGM = '';
+
+fprintf('[dartel_warp][SPM] 流场: %s\n', flowField);
+end
+
+function rcFile = infer_rc_file(cFile, tissueIdx)
+[pth, name, ext] = fileparts(cFile);
+if startsWith(name, sprintf('c%d', tissueIdx))
+    rcName = regexprep(name, sprintf('^c%d', tissueIdx), sprintf('rc%d', tissueIdx));
+    rcFile = fullfile(pth, [rcName ext]);
+else
+    rcFile = fullfile(pth, sprintf('rc%d%s', tissueIdx, name));
+end
+
+if ~exist(rcFile, 'file')
+    cand = dir(fullfile(pth, sprintf('rc%d*.nii', tissueIdx)));
+    if ~isempty(cand)
+        rcFile = fullfile(cand(1).folder, cand(1).name);
+    end
+end
+
+if ~exist(rcFile, 'file')
+    error('[dartel_warp] 未找到 DARTEL 导入文件 rc%d*: %s', tissueIdx, pth);
+end
+end
+
+function tf = use_spm_structural_backend(cfg)
+tf = isstruct(cfg) && isfield(cfg, 'spm') && ...
+     isfield(cfg.spm, 'useStructural') && logical(cfg.spm.useStructural);
+end
+
+function spmDir = resolve_spm_dir(cfg)
+if isstruct(cfg) && isfield(cfg, 'spm') && isfield(cfg.spm, 'dir') && ~isempty(cfg.spm.dir)
+    spmDir = cfg.spm.dir;
+elseif isstruct(cfg) && isfield(cfg, 'installPaths') && isfield(cfg.installPaths, 'spmRoot')
+    spmDir = cfg.installPaths.spmRoot;
+else
+    spmDir = 'D:/spm';
+end
 end
 
 % ======================================================================

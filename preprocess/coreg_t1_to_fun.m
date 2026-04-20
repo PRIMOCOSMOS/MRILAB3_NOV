@@ -1,4 +1,4 @@
-function [outFile, finalParams] = coreg_t1_to_fun(t1File, funFile, outDir)
+function [outFile, finalParams] = coreg_t1_to_fun(t1File, funFile, outDir, cfg)
 % coreg_t1_to_fun - 将 T1 结构像刚体配准到功能像（EPI）空间
 %
 % 背景:
@@ -20,8 +20,17 @@ function [outFile, finalParams] = coreg_t1_to_fun(t1File, funFile, outDir)
 %   outFile     - 仿射更新后的 T1 NIfTI（前缀 'coreg_'）
 %   finalParams - 最终刚体参数 [tx ty tz rx ry rz]
 
+if nargin < 4
+    cfg = struct();
+end
+
 fprintf('[coreg_t1_to_fun] T1=%s\n', t1File);
 fprintf('[coreg_t1_to_fun] Fun=%s\n', funFile);
+
+if use_spm_structural_backend(cfg)
+    [outFile, finalParams] = coreg_with_spm(t1File, funFile, outDir, cfg);
+    return;
+end
 
 % -------- 读取图像 --------
 [t1Data, t1Hdr] = nifti_read(t1File);
@@ -120,6 +129,71 @@ ensure_dir(outDir);
 outFile = fullfile(outDir, ['coreg_' fname ext]);
 nifti_write(outFile, single(t1Data), t1HdrNew);
 fprintf('[coreg_t1_to_fun] 已写出: %s\n', outFile);
+end
+
+function [outFile, finalParams] = coreg_with_spm(t1File, funFile, outDir, cfg)
+% 使用 SPM 默认参数进行 Coregister: Estimate（不重采样，仅更新仿射）
+spmDir = resolve_spm_dir(cfg);
+if ~exist(fullfile(spmDir, 'spm.m'), 'file')
+    error('[coreg_t1_to_fun] 未找到 SPM: %s', spmDir);
+end
+
+addpath(spmDir);
+spm('defaults', 'FMRI');
+
+ensure_dir(outDir);
+[~, fname, ext] = fileparts(t1File);
+outFile = fullfile(outDir, ['coreg_' fname ext]);
+copyfile(t1File, outFile);
+
+if strcmpi(get_coreg_mode(cfg), 'identity')
+    finalParams = zeros(1,6);
+    fprintf('[coreg_t1_to_fun][SPM] coreg.mode=identity，跳过估计并保持原始仿射\n');
+    fprintf('[coreg_t1_to_fun][SPM] 已写出: %s\n', outFile);
+    return;
+end
+
+VG = spm_vol(funFile);
+VF = spm_vol(outFile);
+
+flags = struct();
+flags.cost_fun = 'nmi';
+flags.sep      = [4 2];
+flags.fwhm     = [7 7];
+flags.tol      = [0.02 0.02 0.02 0.001 0.001 0.001];
+
+x = spm_coreg(VG(1), VF(1), flags);
+M = spm_matrix(x(:)');
+MM = M \ VF(1).mat;
+spm_get_space(outFile, MM);
+
+finalParams = x(:)';
+fprintf('[coreg_t1_to_fun][SPM] 配准完成: [tx=%.3f ty=%.3f tz=%.3f rx=%.6f ry=%.6f rz=%.6f]\n', ...
+    finalParams(1), finalParams(2), finalParams(3), ...
+    finalParams(4), finalParams(5), finalParams(6));
+fprintf('[coreg_t1_to_fun][SPM] 已写出: %s\n', outFile);
+end
+
+function tf = use_spm_structural_backend(cfg)
+tf = isstruct(cfg) && isfield(cfg, 'spm') && ...
+     isfield(cfg.spm, 'useStructural') && logical(cfg.spm.useStructural);
+end
+
+function spmDir = resolve_spm_dir(cfg)
+if isstruct(cfg) && isfield(cfg, 'spm') && isfield(cfg.spm, 'dir') && ~isempty(cfg.spm.dir)
+    spmDir = cfg.spm.dir;
+elseif isstruct(cfg) && isfield(cfg, 'installPaths') && isfield(cfg.installPaths, 'spmRoot')
+    spmDir = cfg.installPaths.spmRoot;
+else
+    spmDir = 'D:/spm';
+end
+end
+
+function mode = get_coreg_mode(cfg)
+mode = 'estimate';
+if isstruct(cfg) && isfield(cfg, 'coreg') && isfield(cfg.coreg, 'mode') && ~isempty(cfg.coreg.mode)
+    mode = cfg.coreg.mode;
+end
 end
 
 % ======================================================================

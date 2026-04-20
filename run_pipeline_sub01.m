@@ -194,6 +194,23 @@ end
 write_log(logFile, sprintf('  Fun Reoriented: %s', funNii_Ro));
 write_log(logFile, sprintf('  T1 Reoriented:  %s', t1Nii_Ro));
 
+% 可选：生成 dcm2niix 的 Crop_1 作为结构链输入
+t1Nii_Struct = t1Nii_Ro;
+if isfield(cfg, 't1') && isfield(cfg.t1, 'useDcm2niixCrop') && logical(cfg.t1.useDcm2niixCrop)
+    try
+        t1Nii_Crop = fullfile(cfg.t1ImgDir, 'reorient_t1_Crop_1.nii');
+        if shouldRun(t1Nii_Crop)
+            t1Nii_Crop = generate_t1_crop_dcm2niix(cfg.t1RawDir, cfg.t1ImgDir, cfg);
+        end
+        if exist(t1Nii_Crop, 'file')
+            t1Nii_Struct = t1Nii_Crop;
+            write_log(logFile, sprintf('  T1 Structural Input (Crop): %s', t1Nii_Struct));
+        end
+    catch ME
+        write_log(logFile, sprintf('  警告: 生成 Crop_1 失败，回退 reorient_t1: %s', ME.message));
+    end
+end
+
 % ======================================================================
 % Step 06: T1 脑提取（BET）
 % ======================================================================
@@ -204,7 +221,13 @@ fprintf('\n--- Step 06: BET T1 ---\n');
 t1Nii_Bet = fullfile(cfg.t1ImgBetDir, ['bet_' t1Base_Ro '.nii']);
 t1Mask_Bet = fullfile(cfg.t1ImgBetDir, ['betmask_' t1Base_Ro '.nii']);
 if shouldRun(t1Nii_Bet)
-    [t1Nii_Bet, t1Mask_Bet] = brain_extract_t1(t1Nii_Ro, cfg.t1ImgBetDir, cfg);
+    [betOut, maskOut] = brain_extract_t1(t1Nii_Struct, cfg.t1ImgBetDir, cfg);
+    if ~strcmpi(betOut, t1Nii_Bet)
+        copyfile(betOut, t1Nii_Bet);
+    end
+    if ~strcmpi(maskOut, t1Mask_Bet)
+        copyfile(maskOut, t1Mask_Bet);
+    end
 else
     write_log(logFile, '  已存在，跳过');
 end
@@ -217,23 +240,29 @@ write_log(logFile, sprintf('  BET Mask: %s', t1Mask_Bet));
 write_log(logFile, 'Step07: T1 Coreg to Fun');
 fprintf('\n--- Step 07: Coreg T1 → Fun ---\n');
 
+useSpmStructural = isfield(cfg, 'spm') && isfield(cfg.spm, 'useStructural') && logical(cfg.spm.useStructural);
+t1ForCoreg = t1Nii_Struct;
+
 t1Nii_Coreg = fullfile(cfg.t1ImgCoregDir, ['coreg_' t1Base_Ro '.nii']);
 if shouldRun(t1Nii_Coreg)
-    [t1Nii_Coreg, ~] = coreg_t1_to_fun(t1Nii_Bet, funNii_Ro, cfg.t1ImgCoregDir);
+    [coregOut, ~] = coreg_t1_to_fun(t1ForCoreg, funNii_Ro, cfg.t1ImgCoregDir, cfg);
+    if ~strcmpi(coregOut, t1Nii_Coreg)
+        copyfile(coregOut, t1Nii_Coreg);
+    end
 else
     write_log(logFile, '  已存在，跳过');
 end
 write_log(logFile, sprintf('  T1 Coreg: %s', t1Nii_Coreg));
 
 % ======================================================================
-% Step 08: 组织分割（New Segment: GM/WM/CSF）
+% Step 08: 组织分割（Standalone GMM 或 SPM New Segment）
 % ======================================================================
-write_log(logFile, 'Step08: T1 组织分割（GMM）');
+write_log(logFile, 'Step08: T1 组织分割');
 fprintf('\n--- Step 08: Segment ---\n');
 
-gmFile  = fullfile(cfg.t1SegDir, 'c2_t1.nii');  % GM: c2
-wmFile  = fullfile(cfg.t1SegDir, 'c3_t1.nii');  % WM: c3
-csfFile = fullfile(cfg.t1SegDir, 'c1_t1.nii');  % CSF: c1
+gmFile  = fullfile(cfg.t1SegDir, 'c2_t1.nii');
+wmFile  = fullfile(cfg.t1SegDir, 'c3_t1.nii');
+csfFile = fullfile(cfg.t1SegDir, 'c1_t1.nii');
 
 if shouldRun(gmFile)
     [gmFile, wmFile, csfFile] = segment_tissue(t1Nii_Coreg, cfg.t1SegDir, cfg);
@@ -266,7 +295,12 @@ fprintf('\n--- Step 10: Normalize ---\n');
 [~, funBase_Ro] = fileparts(funNii_Ro);
 funNii_W = fullfile(cfg.funImgARWDir, ['w' funBase_Ro '.nii']);
 if shouldRun(funNii_W)
-    funNii_W = normalize_apply(funNii_Ro, flowFile, cfg.funImgARWDir, cfg.normalize);
+    if useSpmStructural
+        template6 = fullfile(cfg.t1SegDir, 'Template_6.nii');
+        funNii_W = normalize_apply_spm_dartel(funNii_Ro, flowFile, template6, cfg.funImgARWDir, cfg.normalize, cfg);
+    else
+        funNii_W = normalize_apply(funNii_Ro, flowFile, cfg.funImgARWDir, cfg.normalize);
+    end
 else
     write_log(logFile, '  已存在，跳过');
 end

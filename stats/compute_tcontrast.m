@@ -31,9 +31,11 @@ contrast = contrast(:);
 
 % -------- 扩展对比向量（必要时补零）--------
 if numel(contrast) < nCols
-    contrast(end+1:nCols) = 0;
+    contrast = [contrast; zeros(nCols - numel(contrast), 1)];
+elseif numel(contrast) > nCols
+    contrast = contrast(1:nCols);
 end
-contrast = contrast(1:nCols);
+contrast = reshape(contrast, [], 1);
 
 % -------- 计算 β 协方差核（数值稳定）--------
 % 对于 beta=pinv(X)*Y，有 Cov(beta)=sigma^2 * (pinv(X)*pinv(X)')

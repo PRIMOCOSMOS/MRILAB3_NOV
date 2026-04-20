@@ -58,78 +58,116 @@ xs = 1:sep_vox(1):nx;
 ys = 1:sep_vox(2):ny;
 zs = 1:sep_vox(3):nz;
 [Xs, Ys, Zs] = ndgrid(xs, ys, zs);
-nPts = numel(Xs);
+refCoords = [Xs(:)'; Ys(:)'; Zs(:)'];  % [3 x nPts], 1-based
+nPts = size(refCoords, 2);
+
+% 在图像中心坐标系下估计旋转可显著降低平移-旋转耦合
+center = (double([nx; ny; nz]) + 1) / 2;  % 1-based 体素中心
+refCentered = refCoords - center;
 
 % -------- 确定参考体 --------
-if rtm
-    % 两遍：先对第1帧配准，再以均值像为参考
-    refVol = double(data(:,:,:,1));
-else
-    refVol = double(data(:,:,:,1));
-end
+% 两遍策略时，第一遍也以第1帧为初始参考
+refVol = double(data(:,:,:,1));
 
-% -------- 第一遍：估计头动参数 --------
-params = zeros(nt, 6);  % [tx ty tz rx ry rz]
+% -------- 估计头动参数（内部参数：体素平移 + 弧度旋转）--------
+paramsVox = zeros(nt, 6);  % [tx_vox ty_vox tz_vox rx ry rz]
 
 for pass = 1:(1+rtm)  % 若rtm=1则跑两遍
     if pass == 2
         % 第二遍用均值像作为参考
-        resliced = reslice_all(data, params, hdr);
+        resliced = reslice_all(data, paramsVox, center);
         refVol = mean(resliced, 4);
     end
 
-    % 预计算参考图像及其梯度
-    [gx, gy, gz] = vol_gradient(refVol);
+    % 参考体在采样点上的强度（当前 pass 固定）
+    refVals = trilinear_interp(refVol, refCoords);
 
     for t = 1:nt
         if t == 1 && pass == 1
-            params(t,:) = zeros(1,6);
+            paramsVox(t,:) = zeros(1,6);
             continue;
         end
 
         curVol = double(data(:,:,:,t));
+        [cgx, cgy, cgz] = vol_gradient(curVol);
 
-        % 高斯-牛顿 迭代
-        p = params(t,:);
-        for iter = 1:maxIter
-            M   = rigid_mat(p);  % 当前参数的变换矩阵
-
-            % 将参考网格坐标（1-based 体素）变换到当前图像坐标（1-based 体素）
-            % 构建 [4×nPts] 齐次坐标矩阵（1-based 体素坐标）
-            coordsRef_h = [Xs(:)'; Ys(:)'; Zs(:)'; ones(1,nPts)];  % [4×nPts]，1-based
-            coordsCur   = M \ coordsRef_h;  % [4×nPts]，1-based（M 在体素空间近似有效）
-
-            % 在当前图像中插值
-            Ival = trilinear_interp(curVol,  coordsCur(1:3,:));  % I(cur)
-            Rval = trilinear_interp(refVol,  [Xs(:)'; Ys(:)'; Zs(:)']);  % Ref
-
-            % 残差
-            r = Rval(:) - Ival(:);
-
-            % 雅可比矩阵: ∂I/∂p = [∂I/∂x, ∂I/∂y, ∂I/∂z] × ∂(Mx)/∂p
-            Gx = trilinear_interp(gx, coordsCur(1:3,:));
-            Gy = trilinear_interp(gy, coordsCur(1:3,:));
-            Gz = trilinear_interp(gz, coordsCur(1:3,:));
-
-            % ∂(Mx)/∂p for rigid body (6×3 per point -> 3×6 per point)
-            % J = [G] × [dM/dp]   → J is [nPts × 6]
-            J = compute_jacobian(Gx(:)', Gy(:)', Gz(:)', Xs(:)', Ys(:)', Zs(:)');
-
-            % Gauss-Newton 更新
-            JtJ = J' * J + 1e-6 * eye(6);  % 正则化
-            Jtr = J' * r;
-            dp  = JtJ \ Jtr;
-
-            p = p + dp';
-            if norm(dp) < tol, break; end
+        % 以相邻时间点为初值，符合 fMRI 头动的时间连续性
+        if pass == 1 && t > 1
+            p = paramsVox(t-1,:);
+        else
+            p = paramsVox(t,:);
         end
 
-        params(t,:) = p;
+        bestP = p;
+        bestCost = inf;
+        stagnationCount = 0;
+
+        % 阻尼高斯-牛顿迭代
+        for iter = 1:maxIter
+            coordsCur = transform_ref_to_cur(refCoords, p, center);
+            validMask = coordsCur(1,:) >= 1 & coordsCur(1,:) <= nx & ...
+                        coordsCur(2,:) >= 1 & coordsCur(2,:) <= ny & ...
+                        coordsCur(3,:) >= 1 & coordsCur(3,:) <= nz;
+
+            if nnz(validMask) < 256
+                warning('[realign] t=%d 有效重叠采样点不足（%d/%d），回退最佳参数', t, nnz(validMask), nPts);
+                p = bestP;
+                break;
+            end
+
+            coordsCurValid = coordsCur(:, validMask);
+            refValid = refVals(validMask);
+
+            % 残差定义：r = I_ref - I_cur(T(x,p))
+            Ival = trilinear_interp(curVol, coordsCurValid);
+            r = refValid(:) - Ival(:);
+            curCost = mean(r.^2);
+
+            if curCost < bestCost
+                bestCost = curCost;
+                bestP = p;
+                stagnationCount = 0;
+            else
+                stagnationCount = stagnationCount + 1;
+            end
+
+            % 使用“当前图像”梯度（符合 Gauss-Newton 线性化）
+            Gx = trilinear_interp(cgx, coordsCurValid);
+            Gy = trilinear_interp(cgy, coordsCurValid);
+            Gz = trilinear_interp(cgz, coordsCurValid);
+
+            J = compute_jacobian( ...
+                Gx(:)', Gy(:)', Gz(:)', ...
+                refCentered(1, validMask), ...
+                refCentered(2, validMask), ...
+                refCentered(3, validMask));
+
+            JtJ = J' * J;
+            damping = 1e-4 * (trace(JtJ) / 6 + eps);
+            dp = (JtJ + damping * eye(6)) \ (J' * r);
+
+            % 步长限制：避免一次更新过大导致发散
+            dp = limit_update_step(dp);
+            p = clamp_parameter_bounds(p + dp');
+
+            if norm(dp) < tol || stagnationCount >= 4
+                p = bestP;
+                break;
+            end
+        end
+
+        paramsVox(t,:) = bestP;
         if mod(t, 50)==0
             fprintf('[realign]  已处理 %d/%d 时间点\n', t, nt);
         end
     end
 end
+
+% rp 文件使用 mm/rad 约定（与 SPM 输出习惯一致）
+params = paramsVox;
+params(:,1) = paramsVox(:,1) * voxSz(1);
+params(:,2) = paramsVox(:,2) * voxSz(2);
+params(:,3) = paramsVox(:,3) * voxSz(3);
 
 fprintf('[realign] 参数估计完成，最大平移=%.2fmm，最大旋转=%.4frad\n', ...
     max(abs(params(:,1:3)),[],'all'), max(abs(params(:,4:6)),[],'all'));
@@ -146,7 +184,7 @@ fprintf('[realign] 头动参数已写出: %s\n', rpFile);
 
 % -------- 重采样所有时间点到参考空间 --------
 fprintf('[realign] 开始重采样所有时间点...\n');
-dataR = reslice_all(data, params, hdr);
+dataR = reslice_all(data, paramsVox, center);
 
 % -------- 写出重采样数据 --------
 ensure_dir(outDir);
@@ -175,7 +213,7 @@ function [gx, gy, gz] = vol_gradient(vol)
 [gx, gy, gz] = gradient(vol);
 end
 
-function J = compute_jacobian(Gx, Gy, Gz, X, Y, Z)
+function J = compute_jacobian(Gx, Gy, Gz, Xc, Yc, Zc)
 % 计算刚体变换参数的雅可比矩阵
 % 对 6 个参数 [tx ty tz rx ry rz] 求偏导
 % 每行对应一个采样点，共 6 列
@@ -195,27 +233,24 @@ J(:,2) = Gy(:);    % ∂I/∂ty
 J(:,3) = Gz(:);    % ∂I/∂tz
 
 % 旋转分量（链式法则）
-J(:,4) = Gy(:) .* (-Z(:)) + Gz(:) .* Y(:);   % ∂I/∂rx
-J(:,5) = Gx(:) .* Z(:)    + Gz(:) .* (-X(:)); % ∂I/∂ry
-J(:,6) = Gx(:) .* (-Y(:)) + Gy(:) .* X(:);   % ∂I/∂rz
+J(:,4) = Gy(:) .* (-Zc(:)) + Gz(:) .* Yc(:);    % ∂I/∂rx
+J(:,5) = Gx(:) .* Zc(:)    + Gz(:) .* (-Xc(:)); % ∂I/∂ry
+J(:,6) = Gx(:) .* (-Yc(:)) + Gy(:) .* Xc(:);    % ∂I/∂rz
 end
 
-function dataR = reslice_all(data, params, hdr)
+function dataR = reslice_all(data, paramsVox, center)
 % 将所有时间点重采样到参考空间
 [nx, ny, nz, nt] = size(data);
 dataR = zeros(nx, ny, nz, nt, 'single');
 
 % 参考空间网格（1-based 体素坐标）
 [Xr, Yr, Zr] = ndgrid(1:nx, 1:ny, 1:nz);
-refCoords = [Xr(:)'; Yr(:)'; Zr(:)'; ones(1,nx*ny*nz)];
+refCoords = [Xr(:)'; Yr(:)'; Zr(:)'];
 
 for t = 1:nt
-    M = rigid_mat(params(t,:));
+    curCoords = transform_ref_to_cur(refCoords, paramsVox(t,:), center);
 
-    % 参考坐标 → 当前图像坐标
-    curCoords = M \ refCoords;
-
-    vals = trilinear_interp(double(data(:,:,:,t)), curCoords(1:3,:));
+    vals = trilinear_interp(double(data(:,:,:,t)), curCoords);
     dataR(:,:,:,t) = single(reshape(vals, nx, ny, nz));
 end
 
@@ -224,12 +259,51 @@ finiteRatio = nnz(isfinite(dataR)) / numel(dataR);
 if finiteRatio < 1
     error('[realign] 重采样结果包含非有限值 (finiteRatio=%.6f)，请检查配准变换', finiteRatio);
 end
-sampleVol = double(dataR(:,:,:,max(1, round(nt/2))));
-volStd = std(sampleVol(:));
+volStd = squeeze(std(reshape(double(dataR), [], nt), 0, 1));
 % 经验阈值：float32 数据在正常 fMRI 强度范围下，体数据标准差远大于 1e-6；
 % 该阈值仅用于捕获“近乎常数图像（纯白/纯黑）”这类明显失败情形。
 MIN_ACCEPTABLE_STD = 1e-6;
-if volStd < MIN_ACCEPTABLE_STD
-    error('[realign] 重采样结果近似常数图像 (std=%.3e)，请检查配准参数与坐标变换', volStd);
+badIdx = find(volStd < MIN_ACCEPTABLE_STD, 1, 'first');
+if ~isempty(badIdx)
+    error('[realign] 重采样结果包含近似常数图像 (t=%d, std=%.3e)，请检查配准参数与坐标变换', ...
+      badIdx, volStd(badIdx));
 end
+end
+
+function coordsCur = transform_ref_to_cur(refCoords, p, center)
+% 将参考坐标映射到当前图像坐标（均为1-based体素坐标）
+R = rotation_matrix(p(4), p(5), p(6));
+t = p(1:3).';
+coordsCur = R * (refCoords - center) + center + t;
+end
+
+function R = rotation_matrix(rx, ry, rz)
+% 与 rigid_mat 保持一致的旋转顺序：R = Rz * Ry * Rx
+Rx = [1,      0,       0;
+    0,  cos(rx), -sin(rx);
+    0,  sin(rx),  cos(rx)];
+Ry = [ cos(ry), 0, sin(ry);
+        0,  1,      0;
+    -sin(ry), 0, cos(ry)];
+Rz = [cos(rz), -sin(rz), 0;
+    sin(rz),  cos(rz), 0;
+         0,        0,  1];
+R = Rz * Ry * Rx;
+end
+
+function dp = limit_update_step(dp)
+% 迭代步长限制，防止大步长导致优化发散
+dp = dp(:);
+MAX_TRANS_STEP_VOX = 0.5;
+MAX_ROT_STEP_RAD = 0.01;
+dp(1:3) = max(min(dp(1:3), MAX_TRANS_STEP_VOX), -MAX_TRANS_STEP_VOX);
+dp(4:6) = max(min(dp(4:6), MAX_ROT_STEP_RAD), -MAX_ROT_STEP_RAD);
+end
+
+function p = clamp_parameter_bounds(p)
+% 参数绝对范围限制（内部单位：voxel + rad）
+MAX_TRANS_ABS_VOX = 20;
+MAX_ROT_ABS_RAD = 0.35;
+p(1:3) = max(min(p(1:3), MAX_TRANS_ABS_VOX), -MAX_TRANS_ABS_VOX);
+p(4:6) = max(min(p(4:6), MAX_ROT_ABS_RAD), -MAX_ROT_ABS_RAD);
 end

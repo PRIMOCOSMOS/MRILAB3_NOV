@@ -59,9 +59,9 @@ mx = mni_dims(1); my = mni_dims(2); mz = mni_dims(3);
 
 % MNI 体素 → 世界坐标（mm）
 % MNI 仿射：以 origin 为零点
-mni_affine = [mni_vox(1) 0 0 -mni_vox(1)*(mni_origin(1)-1);
-              0 mni_vox(2) 0 -mni_vox(2)*(mni_origin(2)-1);
-              0 0 mni_vox(3) -mni_vox(3)*(mni_origin(3)-1);
+mni_affine = [-mni_vox(1) 0 0  mni_vox(1)*(mni_origin(1)-1);
+              0  mni_vox(2) 0 -mni_vox(2)*(mni_origin(2)-1);
+              0 0  mni_vox(3) -mni_vox(3)*(mni_origin(3)-1);
               0 0 0           1                             ];
 
 % 输入图像仿射（个体空间世界坐标 → 体素坐标，用于最终采样步骤）

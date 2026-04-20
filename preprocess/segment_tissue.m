@@ -26,6 +26,12 @@ function [gmFile, wmFile, csfFile] = segment_tissue(t1File, outDir, cfg)
 %   csfFile - CSF 概率图 NIfTI 路径（c1_t1.nii）
 
 fprintf('[segment_tissue] 读取 T1: %s\n', t1File);
+
+if use_spm_structural_backend(cfg)
+    [gmFile, wmFile, csfFile] = segment_with_spm(t1File, outDir, cfg);
+    return;
+end
+
 [t1Data, hdr] = nifti_read(t1File);
 vol = double(t1Data(:,:,:,1));
 [nx, ny, nz] = size(vol);
@@ -147,6 +153,91 @@ end
 csfFile = outFiles{1};
 gmFile  = outFiles{2};
 wmFile  = outFiles{3};
+end
+
+function [gmFile, wmFile, csfFile] = segment_with_spm(t1File, outDir, cfg)
+% 使用 SPM New Segment（spm_preproc_run）默认参数
+spmDir = resolve_spm_dir(cfg);
+if ~exist(fullfile(spmDir, 'spm.m'), 'file')
+    error('[segment_tissue] 未找到 SPM: %s', spmDir);
+end
+
+addpath(spmDir);
+spm('defaults', 'FMRI');
+spm_jobman('initcfg');
+
+ensure_dir(outDir);
+segInput = fullfile(outDir, 't1.nii');
+copyfile(t1File, segInput);
+
+tpmFile = fullfile(spmDir, 'tpm', 'TPM.nii');
+if ~exist(tpmFile, 'file')
+    error('[segment_tissue] 未找到 TPM 模板: %s', tpmFile);
+end
+
+job = struct();
+job.channel.vols    = {segInput};
+job.channel.biasreg = 0.001;
+job.channel.biasfwhm= 60;
+job.channel.write   = [1 1];
+
+ngaus = [1 1 2 3 4 2];
+for k = 1:6
+    job.tissue(k).tpm   = {sprintf('%s,%d', tpmFile, k)};
+    job.tissue(k).ngaus = ngaus(k);
+    if k <= 2
+        job.tissue(k).native = [1 1];
+        job.tissue(k).warped = [1 1];
+    elseif k == 3
+        job.tissue(k).native = [1 0];
+        job.tissue(k).warped = [0 0];
+    else
+        job.tissue(k).native = [0 0];
+        job.tissue(k).warped = [0 0];
+    end
+end
+
+job.warp.mrf     = 1;
+job.warp.cleanup = 1;
+job.warp.reg     = [0 0.001 0.5 0.05 0.2];
+job.warp.affreg  = 'mni';
+job.warp.fwhm    = 0;
+job.warp.samp    = 3;
+job.warp.write   = [1 1];
+job.warp.bb      = NaN(2,3);
+job.warp.vox     = NaN(1,3);
+job.niterations  = 1;
+job.alpha        = 12;
+
+spm_preproc_run(job, 'run');
+
+gmFile  = fullfile(outDir, 'c1t1.nii');
+wmFile  = fullfile(outDir, 'c2t1.nii');
+csfFile = fullfile(outDir, 'c3t1.nii');
+
+if ~exist(gmFile, 'file') || ~exist(wmFile, 'file') || ~exist(csfFile, 'file')
+    error('[segment_tissue] SPM 分割输出缺失，请检查 %s', outDir);
+end
+
+fprintf('[segment_tissue][SPM] 已写出 GM/WM/CSF:\n');
+fprintf('  GM : %s\n', gmFile);
+fprintf('  WM : %s\n', wmFile);
+fprintf('  CSF: %s\n', csfFile);
+end
+
+function tf = use_spm_structural_backend(cfg)
+tf = isstruct(cfg) && isfield(cfg, 'spm') && ...
+     isfield(cfg.spm, 'useStructural') && logical(cfg.spm.useStructural);
+end
+
+function spmDir = resolve_spm_dir(cfg)
+if isstruct(cfg) && isfield(cfg, 'spm') && isfield(cfg.spm, 'dir') && ~isempty(cfg.spm.dir)
+    spmDir = cfg.spm.dir;
+elseif isstruct(cfg) && isfield(cfg, 'installPaths') && isfield(cfg.installPaths, 'spmRoot')
+    spmDir = cfg.installPaths.spmRoot;
+else
+    spmDir = 'D:/spm';
+end
 end
 
 % ======================================================================

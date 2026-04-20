@@ -28,7 +28,7 @@ fprintf('[reorient_set_origin] 读取: %s\n', inFile);
 if nargin < 3 || isempty(acVoxCoord)
     % 参照 SPM/DPABI 交互逻辑：三正交视图点击选择 AC（而非纯文本输入）
     defaultAC = round([nx/2, ny/2, nz/2]);
-    acVoxCoord = select_ac_orthviews(data(:,:,:,1), defaultAC, inFile);
+    acVoxCoord = select_ac_orthviews(data(:,:,:,1), defaultAC, inFile, hdr.affine);
     fprintf('[reorient_set_origin] 交互选择 AC: [%d %d %d]\n', ...
         acVoxCoord(1), acVoxCoord(2), acVoxCoord(3));
 else
@@ -85,10 +85,11 @@ nifti_write(outFile, single(data), hdr);
 fprintf('[reorient_set_origin] 已写出: %s\n', outFile);
 end
 
-function acVoxCoord = select_ac_orthviews(vol, defaultAC, inFile)
+function acVoxCoord = select_ac_orthviews(vol, defaultAC, inFile, affine)
 % 三正交视图点击选点（sagittal/coronal/axial），用于 AC 选择
 [nx, ny, nz] = size(vol);
 acVoxCoord = defaultAC;
+orient = compute_view_orientation(affine);
 
 % 无图形环境时回退
 if ~(usejava('jvm') && feature('ShowFigureWindows'))
@@ -101,6 +102,7 @@ end
 fig = figure('Name', sprintf('选择 AC 点（%s）', fname), ...
     'NumberTitle', 'off', 'Color', 'w', ...
     'MenuBar', 'none', 'ToolBar', 'none', ...
+    'WindowScrollWheelFcn', @onScroll, ...
     'Units', 'normalized', 'Position', [0.1 0.15 0.8 0.7]);
 
 axSag = subplot(1,3,1,'Parent',fig);
@@ -110,7 +112,7 @@ axAxi = subplot(1,3,3,'Parent',fig);
 infoText = uicontrol(fig, 'Style', 'text', 'Units', 'normalized', ...
     'Position', [0.02 0.01 0.62 0.07], 'HorizontalAlignment', 'left', ...
     'BackgroundColor', 'w', 'FontSize', 10, ...
-    'String', '点击任一视图更新 AC；完成后点击“确认AC”');
+    'String', '点击任一视图更新 AC；鼠标滚轮可切换当前视图切片；完成后点击“确认AC”');
 
 uicontrol(fig, 'Style', 'pushbutton', 'String', '确认AC', ...
     'Units', 'normalized', 'Position', [0.68 0.02 0.10 0.06], ...
@@ -131,39 +133,48 @@ if isgraphics(fig), delete(fig); end
         % Sagittal (X 固定，显示 Y-Z)
         cla(axSag);
         sag = extract_slice_2d(vol, acVoxCoord, 'sag');
+        sag = apply_view_flip(sag, orient.sag.flipLR, orient.sag.flipUD);
         hSag = imagesc(axSag, sag);
-        axis(axSag, 'image'); axis(axSag, 'ij'); axis(axSag, 'off');
+        axis(axSag, 'image'); set(axSag, 'YDir', 'normal'); axis(axSag, 'off');
         colormap(axSag, gray);
         hold(axSag, 'on');
-        plot(axSag, [acVoxCoord(2) acVoxCoord(2)], [1 nz], 'r-', 'LineWidth', 1);
-        plot(axSag, [1 ny], [acVoxCoord(3) acVoxCoord(3)], 'r-', 'LineWidth', 1);
-        title(axSag, sprintf('Sagittal (X=%d) 点击更新Y/Z', acVoxCoord(1)));
+        yDisp = voxel_to_display(acVoxCoord(2), ny, orient.sag.flipLR);
+        zDisp = voxel_to_display(acVoxCoord(3), nz, orient.sag.flipUD);
+        plot(axSag, [yDisp yDisp], [1 nz], 'r-', 'LineWidth', 1);
+        plot(axSag, [1 ny], [zDisp zDisp], 'r-', 'LineWidth', 1);
+        title(axSag, sprintf('Sagittal (X=%d) 点击更新Y/Z, 滚轮切X', acVoxCoord(1)));
         set(hSag, 'ButtonDownFcn', @onClickSag);
         set(axSag, 'ButtonDownFcn', @onClickSag);
 
         % Coronal (Y 固定，显示 X-Z)
         cla(axCor);
         cor = extract_slice_2d(vol, acVoxCoord, 'cor');
+        cor = apply_view_flip(cor, orient.cor.flipLR, orient.cor.flipUD);
         hCor = imagesc(axCor, cor);
-        axis(axCor, 'image'); axis(axCor, 'ij'); axis(axCor, 'off');
+        axis(axCor, 'image'); set(axCor, 'YDir', 'normal'); axis(axCor, 'off');
         colormap(axCor, gray);
         hold(axCor, 'on');
-        plot(axCor, [acVoxCoord(1) acVoxCoord(1)], [1 nz], 'r-', 'LineWidth', 1);
-        plot(axCor, [1 nx], [acVoxCoord(3) acVoxCoord(3)], 'r-', 'LineWidth', 1);
-        title(axCor, sprintf('Coronal (Y=%d) 点击更新X/Z', acVoxCoord(2)));
+        xDisp = voxel_to_display(acVoxCoord(1), nx, orient.cor.flipLR);
+        zDisp = voxel_to_display(acVoxCoord(3), nz, orient.cor.flipUD);
+        plot(axCor, [xDisp xDisp], [1 nz], 'r-', 'LineWidth', 1);
+        plot(axCor, [1 nx], [zDisp zDisp], 'r-', 'LineWidth', 1);
+        title(axCor, sprintf('Coronal (Y=%d) 点击更新X/Z, 滚轮切Y', acVoxCoord(2)));
         set(hCor, 'ButtonDownFcn', @onClickCor);
         set(axCor, 'ButtonDownFcn', @onClickCor);
 
         % Axial (Z 固定，显示 X-Y)
         cla(axAxi);
         axi = extract_slice_2d(vol, acVoxCoord, 'axi');
+        axi = apply_view_flip(axi, orient.axi.flipLR, orient.axi.flipUD);
         hAxi = imagesc(axAxi, axi);
-        axis(axAxi, 'image'); axis(axAxi, 'ij'); axis(axAxi, 'off');
+        axis(axAxi, 'image'); set(axAxi, 'YDir', 'normal'); axis(axAxi, 'off');
         colormap(axAxi, gray);
         hold(axAxi, 'on');
-        plot(axAxi, [acVoxCoord(1) acVoxCoord(1)], [1 ny], 'r-', 'LineWidth', 1);
-        plot(axAxi, [1 nx], [acVoxCoord(2) acVoxCoord(2)], 'r-', 'LineWidth', 1);
-        title(axAxi, sprintf('Axial (Z=%d) 点击更新X/Y', acVoxCoord(3)));
+        xDisp = voxel_to_display(acVoxCoord(1), nx, orient.axi.flipLR);
+        yDisp = voxel_to_display(acVoxCoord(2), ny, orient.axi.flipUD);
+        plot(axAxi, [xDisp xDisp], [1 ny], 'r-', 'LineWidth', 1);
+        plot(axAxi, [1 nx], [yDisp yDisp], 'r-', 'LineWidth', 1);
+        title(axAxi, sprintf('Axial (Z=%d) 点击更新X/Y, 滚轮切Z', acVoxCoord(3)));
         set(hAxi, 'ButtonDownFcn', @onClickAxi);
         set(axAxi, 'ButtonDownFcn', @onClickAxi);
 
@@ -174,22 +185,50 @@ if isgraphics(fig), delete(fig); end
 
     function onClickSag(~, ~)
         cp = get(axSag, 'CurrentPoint');
-        acVoxCoord(2) = clamp(round(cp(1,1)), 1, ny);
-        acVoxCoord(3) = clamp(round(cp(1,2)), 1, nz);
+        yDisp = clamp(round(cp(1,1)), 1, ny);
+        zDisp = clamp(round(cp(1,2)), 1, nz);
+        acVoxCoord(2) = display_to_voxel(yDisp, ny, orient.sag.flipLR);
+        acVoxCoord(3) = display_to_voxel(zDisp, nz, orient.sag.flipUD);
         refresh_views();
     end
 
     function onClickCor(~, ~)
         cp = get(axCor, 'CurrentPoint');
-        acVoxCoord(1) = clamp(round(cp(1,1)), 1, nx);
-        acVoxCoord(3) = clamp(round(cp(1,2)), 1, nz);
+        xDisp = clamp(round(cp(1,1)), 1, nx);
+        zDisp = clamp(round(cp(1,2)), 1, nz);
+        acVoxCoord(1) = display_to_voxel(xDisp, nx, orient.cor.flipLR);
+        acVoxCoord(3) = display_to_voxel(zDisp, nz, orient.cor.flipUD);
         refresh_views();
     end
 
     function onClickAxi(~, ~)
         cp = get(axAxi, 'CurrentPoint');
-        acVoxCoord(1) = clamp(round(cp(1,1)), 1, nx);
-        acVoxCoord(2) = clamp(round(cp(1,2)), 1, ny);
+        xDisp = clamp(round(cp(1,1)), 1, nx);
+        yDisp = clamp(round(cp(1,2)), 1, ny);
+        acVoxCoord(1) = display_to_voxel(xDisp, nx, orient.axi.flipLR);
+        acVoxCoord(2) = display_to_voxel(yDisp, ny, orient.axi.flipUD);
+        refresh_views();
+    end
+
+    function onScroll(~, evt)
+        % 鼠标滚轮：在当前悬停视图上切换该视图对应方向的切片
+        obj = hittest(fig);
+        ax = ancestor(obj, 'axes');
+        if isempty(ax) || ~isgraphics(ax)
+            return;
+        end
+        step = sign(evt.VerticalScrollCount);
+        if step == 0
+            return;
+        end
+
+        if isequal(ax, axSag)
+            acVoxCoord(1) = clamp(acVoxCoord(1) - step, 1, nx);
+        elseif isequal(ax, axCor)
+            acVoxCoord(2) = clamp(acVoxCoord(2) - step, 1, ny);
+        elseif isequal(ax, axAxi)
+            acVoxCoord(3) = clamp(acVoxCoord(3) - step, 1, nz);
+        end
         refresh_views();
     end
 
@@ -206,6 +245,53 @@ if isgraphics(fig), delete(fig); end
         acVoxCoord = defaultAC;
         uiresume(fig);
     end
+end
+
+function out = apply_view_flip(in, flipLR, flipUD)
+out = in;
+if flipLR
+    out = fliplr(out);
+end
+if flipUD
+    out = flipud(out);
+end
+end
+
+function idxDisp = voxel_to_display(idxVox, n, isFlipped)
+if isFlipped
+    idxDisp = n - idxVox + 1;
+else
+    idxDisp = idxVox;
+end
+end
+
+function idxVox = display_to_voxel(idxDisp, n, isFlipped)
+if isFlipped
+    idxVox = n - idxDisp + 1;
+else
+    idxVox = idxDisp;
+end
+end
+
+function orient = compute_view_orientation(affine)
+% 根据仿射矩阵推断各视图是否需要左右/上下翻转，减少“图像颠倒”
+R = affine(1:3,1:3);
+ex = [1; 0; 0];
+ey = [0; 1; 0];
+ez = [0; 0; 1];
+
+vx = R(:,1);  % voxel-x 在世界坐标中的方向
+vy = R(:,2);  % voxel-y 在世界坐标中的方向
+vz = R(:,3);  % voxel-z 在世界坐标中的方向
+
+orient.sag.flipLR = dot(vy, ey) < 0;  % Sag 水平轴对应 voxel-y
+orient.sag.flipUD = dot(vz, ez) < 0;  % Sag 垂直轴对应 voxel-z
+
+orient.cor.flipLR = dot(vx, ex) < 0;  % Cor 水平轴对应 voxel-x
+orient.cor.flipUD = dot(vz, ez) < 0;  % Cor 垂直轴对应 voxel-z
+
+orient.axi.flipLR = dot(vx, ex) < 0;  % Axi 水平轴对应 voxel-x
+orient.axi.flipUD = dot(vy, ey) < 0;  % Axi 垂直轴对应 voxel-y
 end
 
 function y = clamp(x, lo, hi)

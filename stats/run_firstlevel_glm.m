@@ -37,8 +37,19 @@ nConds = numel(cfg.cond.names);
 X = [X_base(:, 1:nConds), rp, X_base(:, nConds+1:end)];
 
 % 更新列名
-rpNames = {'rp_tx','rp_ty','rp_tz','rp_rx','rp_ry','rp_rz'};
-allNames = [condNames(1:nConds), rpNames, condNames(nConds+1:end)];
+spmCondNames = cell(1, nConds);
+for i = 1:nConds
+    spmCondNames{i} = sprintf('Sn(1) %s*bf(1)', condNames{i});
+end
+rpNames = arrayfun(@(k) sprintf('Sn(1) R%d', k), 1:6, 'UniformOutput', false);
+baseTailNames = condNames(nConds+1:end);
+if ~isempty(baseTailNames)
+    baseTailNames{1} = 'Sn(1) constant';
+    for k = 2:numel(baseTailNames)
+        baseTailNames{k} = sprintf('Sn(1) %s', baseTailNames{k});
+    end
+end
+allNames = [spmCondNames, rpNames, baseTailNames];
 
 % -------- 设计矩阵质量控制与秩修复（仅移除 nuisance 共线列）--------
 protectIdx = 1:nConds;  % 任务条件列必须保留
@@ -73,8 +84,48 @@ catch; end
 
 % -------- 脑掩模（去除背景体素）--------
 meanVol = mean(data4d, 4);
-thresh  = prctile(meanVol(:), 30);  % 取第30百分位数作为阈值
-brainMask = meanVol > thresh;
+maskMethod = 'percentile';
+if isfield(cfg, 'glm') && isfield(cfg.glm, 'maskMethod')
+    maskMethod = cfg.glm.maskMethod;
+end
+if isstring(maskMethod)
+    maskMethod = char(maskMethod);
+end
+if iscell(maskMethod)
+    maskMethod = maskMethod{1};
+end
+maskMethod = lower(char(maskMethod));
+
+switch maskMethod
+    case 'percentile'
+        p = 30;
+        if isfield(cfg, 'glm') && isfield(cfg.glm, 'maskPercentile')
+            p = cfg.glm.maskPercentile;
+        end
+        p = min(max(p, 0), 100);
+        thresh = prctile(meanVol(:), p);
+        baseMask = meanVol > thresh;
+        fprintf('[run_firstlevel_glm] 掩模策略: percentile(%.1f), 阈值=%.4g\n', p, thresh);
+    case 'globalfraction'
+        frac = 0.5;
+        if isfield(cfg, 'glm') && isfield(cfg.glm, 'maskGlobalFraction')
+            frac = cfg.glm.maskGlobalFraction;
+        end
+        frac = min(max(frac, 0), 1);
+        posVals = meanVol(meanVol > 0);
+        if isempty(posVals)
+            gMean = mean(meanVol(:));
+        else
+            gMean = mean(posVals(:));
+        end
+        thresh = frac * gMean;
+        baseMask = meanVol > thresh;
+        fprintf('[run_firstlevel_glm] 掩模策略: globalFraction(%.3f), 全局均值=%.4g, 阈值=%.4g\n', frac, gMean, thresh);
+    otherwise
+        error('[run_firstlevel_glm] 未知掩模策略: %s', maskMethod);
+end
+
+brainMask = baseMask;
 
 % 优先叠加标准空间脑掩模（若已配置）
 if isfield(cfg, 'templates') && isfield(cfg.templates, 'standard') && ...
@@ -102,8 +153,12 @@ if isfield(cfg, 'templates') && isfield(cfg.templates, 'standard') && ...
 end
 
 if ~any(brainMask(:))
-    warning('[run_firstlevel_glm] 脑掩模为空，回退为强度阈值掩模');
-    brainMask = meanVol > thresh;
+    warning('[run_firstlevel_glm] 脑掩模为空，回退为基础掩模');
+    brainMask = baseMask;
+end
+if ~any(brainMask(:))
+    warning('[run_firstlevel_glm] 基础掩模为空，回退为 meanVol>0');
+    brainMask = meanVol > 0;
 end
 nVox = sum(brainMask(:));
 if ~isscalar(nx) || ~isscalar(ny) || ~isscalar(nz) || ~isscalar(nScans)
@@ -116,9 +171,37 @@ Y_flat = reshape(data4d, nx*ny*nz, nScans)';  % [nScans × nVox_all]
 maskIdx = find(brainMask);
 Y_brain = Y_flat(:, maskIdx);  % [nScans × nVox_brain]
 
+% -------- 可选：SPM风格高通滤波（作用于 X 与 Y）--------
+X_est = X;
+Y_est = Y_brain;
+K = [];
+applyHPF = false;
+if isfield(cfg, 'glm') && isfield(cfg.glm, 'applyHighPassFilter')
+    applyHPF = logical(cfg.glm.applyHighPassFilter);
+end
+if applyHPF && isfield(cfg, 'hpf') && cfg.hpf > 0
+    [X_est, Y_est, K] = apply_highpass_filter(X, Y_brain, cfg.TR, cfg.hpf);
+    fprintf('[run_firstlevel_glm] 已应用高通滤波到估计矩阵: HParam=%.1fs\n', cfg.hpf);
+end
+
+% -------- 可选：AR(1) 预白化（SPM风格串行相关修正）--------
+ar1Info = struct('enabled', false, 'rho', 0, 'nVoxUsed', 0);
+useAR1 = true;
+if isfield(cfg, 'glm') && isfield(cfg.glm, 'useAR1Whitening')
+    useAR1 = logical(cfg.glm.useAR1Whitening);
+end
+if useAR1
+    [X_est, Y_est, ar1Info] = apply_ar1_prewhiten(X_est, Y_est);
+    if ar1Info.enabled
+        fprintf('[run_firstlevel_glm] 已应用 AR(1) 预白化: rho=%.4f (vox=%d)\n', ar1Info.rho, ar1Info.nVoxUsed);
+    else
+        fprintf('[run_firstlevel_glm] AR(1) 预白化未启用（rho≈0 或估计失败）\n');
+    end
+end
+
 % -------- OLS 估计 --------
 fprintf('[run_firstlevel_glm] 开始 OLS 估计...\n');
-[beta_brain, res_brain, sigma2_brain] = glm_ols(Y_brain, X);
+[beta_brain, res_brain, sigma2_brain] = glm_ols(Y_est, X_est);
 
 % -------- 将结果填回3D空间 --------
 nColsX = size(X,2);
@@ -152,9 +235,31 @@ nifti_write(fullfile(outDir, 'ResMS.nii'), ...
 % -------- 保存 SPM.mat 兼容结构 --------
 SPM.swd     = outDir;
 SPM.xY.P    = smoothFile;
+SPM.xY.RT   = cfg.TR;
 SPM.xBF.RT  = cfg.TR;
+SPM.xBF.UNITS = cfg.units;
+if isfield(cfg, 'glm') && isfield(cfg.glm, 'microtimeResolution')
+    SPM.xBF.T = cfg.glm.microtimeResolution;
+else
+    SPM.xBF.T = 16;
+end
+if isfield(cfg, 'glm') && isfield(cfg.glm, 'microtimeOnsetBin')
+    SPM.xBF.T0 = cfg.glm.microtimeOnsetBin;
+else
+    SPM.xBF.T0 = 8;
+end
+SPM.xBF.name = 'hrf';
 SPM.xX.X    = X;
 SPM.xX.name = allNames;
+if ~isempty(K)
+    SPM.xX.K = K;
+end
+if ar1Info.enabled
+    SPM.xVi.form = 'AR(1)';
+    SPM.xVi.rho = ar1Info.rho;
+end
+SPM.nscan = nScans;
+SPM.Sess(1).U = make_session_u(cfg);
 SPM.beta    = beta4d;
 SPM.VResMS.fname = fullfile(outDir, 'ResMS.nii');
 SPM.xCon    = [];  % 对比结构（后续添加）
@@ -171,7 +276,7 @@ hdr3d.dim = int16([3, nx, ny, nz, 1, 1, 1, 1]);
 
 fprintf('[run_firstlevel_glm] 计算 T-contrast: %s\n', cfg.tcons.name);
 [tMap, pMap, ~, contrastFiles] = compute_tcontrast(...
-    beta_all, sigma2_all, X, ...
+    beta_all, sigma2_all, X_est, ...
     cfg.tcons.weight(:), ...
     hdr3d, outDir, cfg.tcons.name);
 
@@ -179,6 +284,101 @@ fprintf('[run_firstlevel_glm] 计算 T-contrast: %s\n', cfg.tcons.name);
 if isfield(cfg, 'visualization') && isfield(cfg.visualization, 'enable') && cfg.visualization.enable
     fprintf('[run_firstlevel_glm] 生成交互式3D激活图...\n');
     render_activation_3d(contrastFiles.tFile, cfg.visualization.brainTemplateNii, outDir, cfg.visualization);
+end
+
+function [Xf, Yf, K] = apply_highpass_filter(X, Y, TR, hpfSec)
+% 单会话高通滤波（SPM风格）：R = I - X0*pinv(X0), X0 为 DCT 低频基（去掉常数列）
+nScans = size(X, 1);
+nBases = fix(2 * nScans * TR / hpfSec + 1);
+if nBases <= 1
+    Xf = X;
+    Yf = Y;
+    K = struct('HParam', hpfSec, 'X0', [], 'R', eye(nScans));
+    return;
+end
+
+t = (0:nScans-1)';
+X0 = zeros(nScans, nBases);
+X0(:,1) = 1 / sqrt(nScans);
+for k = 2:nBases
+    X0(:,k) = sqrt(2 / nScans) * cos(pi * (2*t + 1) * (k-1) / (2*nScans));
+end
+
+% 去掉 DC 常数项，保留低频漂移基
+X0 = X0(:,2:end);
+if isempty(X0)
+    R = eye(nScans);
+else
+    R = eye(nScans) - X0 * pinv(X0);
+end
+
+Xf = R * X;
+Yf = R * Y;
+
+K = struct();
+K.HParam = hpfSec;
+K.X0 = X0;
+K.R = R;
+end
+
+function U = make_session_u(cfg)
+% 生成与 SPM.Sess(1).U 结构近似的条件描述
+nConds = numel(cfg.cond.names);
+U = repmat(struct('name',{{''}}, 'ons',[], 'dur',[]), nConds, 1);
+for i = 1:nConds
+    U(i).name = {cfg.cond.names{i}};
+    U(i).ons = cfg.cond.onsets{i}(:);
+    U(i).dur = cfg.cond.durations{i}(:);
+end
+end
+
+function [Xw, Yw, info] = apply_ar1_prewhiten(X, Y)
+% 估计全局 AR(1) 系数并对白化 X/Y。
+% 估计策略：先用 OLS 残差求每体素 lag-1 自相关，再取稳健中位数。
+nScans = size(X, 1);
+if nScans < 3
+    Xw = X;
+    Yw = Y;
+    info = struct('enabled', false, 'rho', 0, 'nVoxUsed', 0);
+    return;
+end
+
+% 初始残差（不打印额外日志，避免污染主流程输出）
+pX = pinv(X);
+res0 = Y - X * (pX * Y);
+
+num = sum(res0(2:end,:) .* res0(1:end-1,:), 1);
+den = sum(res0(1:end-1,:).^2, 1) + eps;
+rhoVec = num ./ den;
+rhoVec = rhoVec(isfinite(rhoVec));
+
+if isempty(rhoVec)
+    Xw = X;
+    Yw = Y;
+    info = struct('enabled', false, 'rho', 0, 'nVoxUsed', 0);
+    return;
+end
+
+rho = median(rhoVec);
+rho = min(max(rho, -0.5), 0.95);
+
+if abs(rho) < 1e-4
+    Xw = X;
+    Yw = Y;
+    info = struct('enabled', false, 'rho', rho, 'nVoxUsed', numel(rhoVec));
+    return;
+end
+
+Xw = zeros(size(X), class(X));
+Yw = zeros(size(Y), class(Y));
+
+firstScale = sqrt(max(1 - rho^2, eps));
+Xw(1,:) = firstScale * X(1,:);
+Yw(1,:) = firstScale * Y(1,:);
+Xw(2:end,:) = X(2:end,:) - rho * X(1:end-1,:);
+Yw(2:end,:) = Y(2:end,:) - rho * Y(1:end-1,:);
+
+info = struct('enabled', true, 'rho', rho, 'nVoxUsed', numel(rhoVec));
 end
 
 fprintf('[run_firstlevel_glm] === 一阶 GLM 分析完成 ===\n');

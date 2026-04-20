@@ -1,0 +1,16 @@
+=== Stage Similarity Audit (threshold=0.90) ===
+AUDIT_A            direct=0.691106 bestFlip=0.689520 pass=0
+AUDIT_AR           direct=0.540182 bestFlip=0.53AUDIT_A     AUDIT_T1_raw       direct=0.362849 bestFlip=0.37AUDIT_AR    AUDIT_T1_crop_ref  direct=0.360663 bestFlip=0.36AUDIT_T1_rawAUDIT_BET          direct=0.206573 bestFlip=0.22AUDIT_T1_croAUDIT_Coreg        direct=0.356269 bestFlip=0.35AUDIT_BET   AUDIT_ARW          direct=0.852379 bestFlip=0.850276 pass=0
+AUDIT_ARWS         direct=0.913399 bestFlip=0.912241 pass=1
+AUDIT_T            direct=0.543673 bestFlip=0.54AUDIT_ARWS         direct=0.913399 bestFlip=0.912241 pass=1
+AUDIT_T            d   -0.2403   -0.1674   -0.2410
+   -0.2017   -0.2234   -0.1960
+   -0.1666   -0.1395   -0.1004
+
+FIRST_FAIL A
+
+   -0.2403   -0.1674   -0.2410
+   -0.2017   -0.2234   -0.1960
+   -0.1666   -0.1395   -0.1004
+
+FIRST_FAIL A

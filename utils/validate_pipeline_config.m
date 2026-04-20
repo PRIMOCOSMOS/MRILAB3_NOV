@@ -91,6 +91,16 @@ if cfg.visualization.enable && ~exist(cfg.visualization.brainTemplateNii, 'file'
     error('[validate_pipeline_config] visualization.brainTemplateNii 不存在: %s', cfg.visualization.brainTemplateNii);
 end
 
+% -------- SPM 结构后端检查 --------
+if isfield(cfg, 'spm') && isfield(cfg.spm, 'useStructural') && logical(cfg.spm.useStructural)
+    if ~isfield(cfg.spm, 'dir') || isempty(cfg.spm.dir)
+        error('[validate_pipeline_config] 已启用 SPM 结构后端，但未设置 cfg.spm.dir');
+    end
+    if ~exist(fullfile(cfg.spm.dir, 'spm.m'), 'file')
+        error('[validate_pipeline_config] SPM 路径无效，未找到 spm.m: %s', cfg.spm.dir);
+    end
+end
+
 % -------- 参数维度与范围 --------
 if numel(cfg.sliceTimingMs) ~= cfg.nSlices
     error('[validate_pipeline_config] sliceTimingMs 长度(%d) != nSlices(%d)', ...
@@ -101,6 +111,12 @@ if cfg.refSliceIdx < 1 || cfg.refSliceIdx > cfg.nSlices
 end
 if cfg.TR <= 0
     error('[validate_pipeline_config] TR 必须 > 0');
+end
+if ~isfield(cfg, 'units') || ~ischar(cfg.units)
+    error('[validate_pipeline_config] 缺少 units 配置（''scans'' 或 ''secs''）');
+end
+if ~ismember(lower(strtrim(cfg.units)), {'scans','secs'})
+    error('[validate_pipeline_config] units 仅支持 ''scans'' 或 ''secs''，当前=%s', cfg.units);
 end
 if cfg.nDummy < 0 || floor(cfg.nDummy) ~= cfg.nDummy
     error('[validate_pipeline_config] nDummy 必须为非负整数');
@@ -142,12 +158,56 @@ for c = 1:nConds
     if numel(cfg.cond.onsets{c}) ~= numel(cfg.cond.durations{c})
         error('[validate_pipeline_config] 第 %d 个条件的 onset 与 duration 数量不一致', c);
     end
+
+    ons = cfg.cond.onsets{c}(:);
+    dur = cfg.cond.durations{c}(:);
+    if any(~isfinite(ons)) || any(~isfinite(dur))
+        error('[validate_pipeline_config] 第 %d 个条件 onset/duration 存在非有限值', c);
+    end
+    if any(ons < 0) || any(dur < 0)
+        error('[validate_pipeline_config] 第 %d 个条件 onset/duration 不能为负值', c);
+    end
+    if strcmpi(cfg.units, 'scans')
+        if any(mod(ons,1)~=0) || any(mod(dur,1)~=0)
+            warning('[validate_pipeline_config] units=scans 时第 %d 个条件存在非整数 onset/duration，建议检查配置', c);
+        end
+    end
 end
 
-% -------- 权重长度（至少覆盖条件列）--------
-minWeightLen = nConds + 6; % run_firstlevel_glm 默认拼接6列头动参数
-if numel(cfg.tcons.weight) < minWeightLen
-    error('[validate_pipeline_config] tcons.weight 长度(%d) < 最小要求(%d=条件列+6头动列)', ...
-        numel(cfg.tcons.weight), minWeightLen);
+if isfield(cfg, 'glm')
+    if isfield(cfg.glm, 'microtimeResolution') && cfg.glm.microtimeResolution < 1
+        error('[validate_pipeline_config] glm.microtimeResolution 必须 >= 1');
+    end
+    if isfield(cfg.glm, 'microtimeOnsetBin')
+        T = max(1, getfield_with_default(cfg.glm, 'microtimeResolution', 16));
+        if cfg.glm.microtimeOnsetBin < 1 || cfg.glm.microtimeOnsetBin > T
+            error('[validate_pipeline_config] glm.microtimeOnsetBin 必须在 [1, microtimeResolution] 范围内');
+        end
+    end
+end
+
+% -------- 对比向量检查（允许简写，后续自动补零）--------
+if ~isfield(cfg, 'tcons') || ~isfield(cfg.tcons, 'weight') || isempty(cfg.tcons.weight)
+    error('[validate_pipeline_config] 缺少 tcons.weight 配置');
+end
+w = cfg.tcons.weight(:);
+if ~isnumeric(w) || any(~isfinite(w))
+    error('[validate_pipeline_config] tcons.weight 必须为有限数值向量');
+end
+if all(abs(w) < eps)
+    error('[validate_pipeline_config] tcons.weight 不能全为 0');
+end
+if numel(w) < nConds
+    warning(['[validate_pipeline_config] tcons.weight 长度(%d) 小于条件数(%d)，', ...
+             '将按尾部补零处理（仅前 %d 个条件参与对比）'], ...
+             numel(w), nConds, numel(w));
+end
+end
+
+function v = getfield_with_default(s, fieldName, defaultVal)
+if isstruct(s) && isfield(s, fieldName)
+    v = s.(fieldName);
+else
+    v = defaultVal;
 end
 end

@@ -38,8 +38,24 @@ end
 if ~isfield(hdr, 'scl_inter')
     hdr.scl_inter = 0;
 end
+if ~isfinite(hdr.scl_slope) || hdr.scl_slope == 0
+    hdr.scl_slope = 1;
+end
+if ~isfinite(hdr.scl_inter)
+    hdr.scl_inter = 0;
+end
 if ~isfield(hdr, 'descrip')
     hdr.descrip = 'Created by nifti_write';
+end
+
+% 计算显示范围，改善 MRIcron/FSLeyes 等查看器默认窗宽行为
+finiteVals = data(isfinite(data));
+if isempty(finiteVals)
+    calMin = 0;
+    calMax = 0;
+else
+    calMin = min(finiteVals(:));
+    calMax = max(finiteVals(:));
 end
 
 % -------- 确定数据类型 --------
@@ -105,7 +121,7 @@ fwrite(fid, uint8(0), 'uint8');
 % 19. xyzt_units (1): mm + sec = 0x0A = 10
 fwrite(fid, uint8(10), 'uint8');
 % 20. cal_max, cal_min (8)
-fwrite(fid, single([0 0]), 'float32');
+fwrite(fid, single([calMax calMin]), 'float32');
 % 21. slice_duration, toffset (8)
 fwrite(fid, single([0 0]), 'float32');
 % 22. glmax, glmin (8)
@@ -147,7 +163,7 @@ fwrite(fid, zeros(1,4,'uint8'), 'uint8');
 
 % -------- 写出图像数据 --------
 % 如有缩放，先逆缩放
-if hdr.scl_slope ~= 0 && hdr.scl_slope ~= 1
+if isfinite(hdr.scl_slope) && hdr.scl_slope ~= 0 && hdr.scl_slope ~= 1
     data = (data - hdr.scl_inter) / hdr.scl_slope;
 end
 

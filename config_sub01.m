@@ -53,6 +53,19 @@ cfg.outDirs = { ...
 cfg.installPaths.dpabiRoot = 'D:\DPABI_V9.0_250415';
 cfg.installPaths.spmRoot   = 'D:\spm';                % 优先使用用户本机 SPM25 路径
 cfg.installPaths.spmFallbackRoots = {'D:\spm25'};     % 兼容其他命名
+
+% 结构链路后端：true=使用 SPM 默认实现（coreg/new-segment/dartel/normalize）
+cfg.spm.useStructural = true;
+cfg.spm.dir = cfg.installPaths.spmRoot;
+
+% T1 结构链路：优先使用 dcm2niix 生成的 Crop_1 作为结构输入（更接近 DPABI 语义）
+cfg.t1.useDcm2niixCrop = true;
+cfg.t1.dcm2niixExeCandidates = { ...
+    fullfile(cfg.installPaths.dpabiRoot, 'DPARSF', 'dcm2nii', 'dcm2niix.exe'), ...
+    'D:\SRTP\MRIcron\Resources\dcm2niix.exe'};
+
+% Coreg 模式：'identity' 保持几何不变（Gold-parity），'estimate' 使用 SPM 估计
+cfg.coreg.mode = 'identity';
 %
 % ── DARTEL 模板 ──────────────────────────────────────────────────────
 %   本 pipeline 为单被试模式，无法自建群组级 DARTEL 模板（DPABI 中
@@ -75,7 +88,7 @@ cfg.templates.dartel.wmVolumeIndex = 2;   % 4D模板中 WM 所在帧（通常为
 %   来自 DPABI/Templates/ 目录，仅有 .hdr/.img 格式（无 .nii）
 %   pipeline 的 nifti_read 已支持 Analyze 7.5 格式读取。
 %   仿射矩阵自动从 .mat sidecar（如存在）或头中的 originator 字段解析。
-cfg.templates.standard.brainMaskNii = fullfile(cfg.installPaths.dpabiRoot, 'Templates', 'BrainMask_05_91x109x91.hdr');
+cfg.templates.standard.brainMaskNii = fullfile(cfg.installPaths.dpabiRoot, 'Templates', 'BrainMask_05_61x73x61.hdr');
 %
 % ── T1 可视化模板 ───────────────────────────────────────────────────
 %   来自 DPABI/Templates/ch2.nii（Colin Holmes T1 MNI 标准脑，非 ch2bet）
@@ -134,8 +147,15 @@ cfg.realign.tol       = 1e-8;  % 收敛阈值
 cfg.fwhm = [6 6 6];  % 高斯核 FWHM (mm) [x y z]
 
 % ====== T1 脑提取（BET）参数 ======
-cfg.bet.percentile = 20;   % 强度阈值百分位（越大掩模越紧）
-cfg.bet.smoothSigma = 1.0; % 掩模平滑核 sigma（体素）；0 表示不平滑
+cfg.bet.method = 'dpabi_bet'; % 'dpabi_bet' / 'spm_prob' / 'percentile'
+cfg.bet.percentile = 1;        % percentile 模式阈值（越大掩模越紧）
+cfg.bet.smoothSigma = 1.0;   % percentile 模式掩模平滑 sigma（体素）
+cfg.bet.dpabiOption = '';      % dpabi_bet 模式传给 y_Call_bet 的选项（结构像默认空）
+
+% spm_prob 模式：利用 SPM 组织概率构建软脑图
+cfg.bet.spmProbGamma = 0.2;
+cfg.bet.spmProbThreshold = 0.01;
+cfg.bet.spmProbScale = 200;
 
 % ====== 分割参数 ======
 cfg.seg.nClasses  = 3;    % 分割类别数 (GM, WM, CSF)
@@ -153,7 +173,7 @@ cfg.dartel.svfIntegrationSteps = 6; % scaling&squaring 步数
 %   Bounding box: [xmin ymin zmin; xmax ymax zmax]（单位 mm）
 %   Voxel size:   [vx vy vz]（单位 mm）
 cfg.normalize.boundingBox = [-90 -126 -72; 90 90 108];
-cfg.normalize.voxSize     = [2 2 2];
+cfg.normalize.voxSize     = [3 3 3];
 
 % 兼容 normalize_apply 的网格参数（由 bbox 与 voxel size 自动推导）
 bboxMin = cfg.normalize.boundingBox(1,:);
@@ -163,17 +183,28 @@ cfg.normalize.origin = 1 - bboxMin ./ cfg.normalize.voxSize;  % 1-based 原点
 
 % ====== 一阶 GLM 参数 ======
 cfg.hpf   = 128;      % 高通滤波截止周期 (秒)
-cfg.units = 'secs';   % onset/duration 单位
+cfg.units = 'scans';  % onset/duration 单位: 'scans' 或 'secs'
+
+% SPM风格一阶建模细节（用于提升与 SPM/DPABI 结果一致性）
+cfg.glm.microtimeResolution   = 16;    % 对应 SPM.xBF.T
+cfg.glm.microtimeOnsetBin     = 8;     % 对应 SPM.xBF.T0
+cfg.glm.applyHighPassFilter   = true;  % 将高通滤波作用于 X 与 Y（SPM风格）
+cfg.glm.useAR1Whitening       = true;  % 串行相关修正（SPM一阶默认近似）
+cfg.glm.maskMethod            = 'globalFraction'; % 'percentile' | 'globalFraction'
+cfg.glm.maskGlobalFraction    = 0.50;  % meanVol > 0.5 * globalMean
+cfg.glm.explicitDriftRegressors = false; % false 时不在 X 中显式加入 DCT 漂移列
 
 % 任务设计（本实验协议）
 % 总 TR=156，TR=2s；去掉前6TR 后剩余 150TR（300s）
-% Task 15TR(30s) + Rest 15TR(30s)，重复 5 次
-cfg.cond.names     = {'Task', 'Rest'};
-cfg.cond.onsets    = {[0 60 120 180 240], [30 90 150 210 270]};  % 秒（相对于去除6个dummy TR后的时间起点；Task先于Rest顺序交替）
-cfg.cond.durations = {30*ones(1,5),        30*ones(1,5)};         % 秒
+% 单任务 block 设计：Task 15TR + Rest 15TR，重复 5 次
+% 与 SPM/DPABI 一致，Rest 作为隐式基线（不显式建模为第二个条件列）
+cfg.cond.names     = {'Task'};
+cfg.cond.onsets    = {[0 30 60 90 120]};  % 扫描点（去除6个dummy TR后）
+cfg.cond.durations = {15*ones(1,5)};      % 扫描点
 
-% T-contrast: Task > Rest
-cfg.tcons.name   = 'Task_gt_Rest';
-cfg.tcons.weight = [1 -1 zeros(1, 6)];  % 示例：前2列对应条件列，后续可按协变量列补零
+% T-contrast: Task > Baseline
+% 仅需给出任务列权重，后续 nuisance 列会在统计函数中自动补零
+cfg.tcons.name   = 'Task_gt_Baseline';
+cfg.tcons.weight = [1];
 
 end
