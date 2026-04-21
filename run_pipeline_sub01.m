@@ -216,8 +216,25 @@ if isfield(cfg, 't1') && isfield(cfg.t1, 'useDcm2niixCrop') && logical(cfg.t1.us
             t1Nii_Crop = generate_t1_crop_dcm2niix(cfg.t1RawDir, cfg.t1ImgDir, cfg);
         end
         if exist(t1Nii_Crop, 'file')
-            t1Nii_Struct = t1Nii_Crop;
-            write_log(logFile, sprintf('  T1 Structural Input (Crop): %s', t1Nii_Struct));
+            % dcm2niix 生成的 Crop_1 与 Gold 体素值可一致，但 affine 可能存在平移偏差；
+            % 为避免该偏差放大到 Step09/10，显式复用 Gold 的 T1 reorient 矩阵。
+            if useSpmReorient
+                [~, cropBase, cropExt] = fileparts(t1Nii_Crop);
+                t1Nii_Crop_Reorient = fullfile(cfg.t1ImgDir, ['reorient_' cropBase cropExt]);
+                if shouldRun(t1Nii_Crop_Reorient)
+                    t1Nii_Crop_Reorient = reorient_set_origin_spm(t1Nii_Crop, cfg.t1ImgDir, cfg, 't1');
+                end
+                if exist(t1Nii_Crop_Reorient, 'file')
+                    t1Nii_Struct = t1Nii_Crop_Reorient;
+                    write_log(logFile, sprintf('  T1 Structural Input (Crop+Reorient): %s', t1Nii_Struct));
+                else
+                    t1Nii_Struct = t1Nii_Crop;
+                    write_log(logFile, sprintf('  T1 Structural Input (Crop fallback): %s', t1Nii_Struct));
+                end
+            else
+                t1Nii_Struct = t1Nii_Crop;
+                write_log(logFile, sprintf('  T1 Structural Input (Crop): %s', t1Nii_Struct));
+            end
         end
     catch ME
         write_log(logFile, sprintf('  警告: 生成 Crop_1 失败，回退 reorient_t1: %s', ME.message));

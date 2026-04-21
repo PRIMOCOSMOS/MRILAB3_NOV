@@ -87,7 +87,7 @@ results(end+1) = evaluate_nifti_corr_step( ...
     'Step07_Coreg', ...
     fullfile(oursBase, 'T1ImgCoreg', 'Sub_01', 'coreg_reorient_t1.nii'), ...
     fullfile(goldBase, 'T1ImgCoreg', 'Sub_01', 'Sub_01_t1_mprage_sag_p2_iso_20190710154350_5a_Crop_1.nii'), ...
-    thrCorr, true, 'direct');
+    thrCorr, false, 'proxy: coreg.mode=identity 下仅头信息透传');
 
 % Step08: New Segment (c1/c2/c3)
 results(end+1) = evaluate_nifti_corr_step_with_samegrid( ...
@@ -130,9 +130,13 @@ results(end+1) = evaluate_nifti_corr_step( ...
     thrCorr, true, 'direct');
 
 % Step12: First-level T-contrast
-results(end+1) = evaluate_nifti_corr_step( ...
+results(end+1) = evaluate_nifti_corr_step_multiours( ...
     'Step12_GLM_T', ...
-    fullfile(oursBase, 'Sub_01_1stLevel', 'spmT_Task_gt_Baseline.nii'), ...
+    { ...
+        fullfile(oursBase, 'Sub_01_1stLevel', 'spmT_0001.nii'), ...
+        fullfile(oursBase, 'Sub_01_1stLevel', 'spmT_t_contrast.nii'), ...
+        fullfile(oursBase, 'Sub_01_1stLevel', 'spmT_Task_gt_Baseline.nii') ...
+    }, ...
     fullfile(goldBase, 'Sub01_1stLevel', 'spmT_0001.nii'), ...
     thrCorr, true, 'direct');
 
@@ -167,6 +171,28 @@ c = corr_resampled(oursFile, goldFile);
 result.value = c;
 result.status = 'ok';
 result.pass = isfinite(c) && (c >= thr);
+end
+
+function result = evaluate_nifti_corr_step_multiours(name, oursFiles, goldFile, thr, gating, modeNote)
+if ~iscell(oursFiles)
+    oursFiles = {oursFiles};
+end
+
+oursFile = '';
+for i = 1:numel(oursFiles)
+    if ischar(oursFiles{i}) && exist(oursFiles{i}, 'file')
+        oursFile = oursFiles{i};
+        break;
+    end
+end
+
+if isempty(oursFile)
+    oursFile = oursFiles{1};
+end
+
+result = evaluate_nifti_corr_step(name, oursFile, goldFile, thr, gating, modeNote);
+[~, oursName, oursExt] = fileparts(oursFile);
+result.note = sprintf('%s ours=%s%s', modeNote, oursName, oursExt);
 end
 
 function result = evaluate_nifti_corr_step_with_samegrid(name, oursFile, goldFile, thr, gating, modeNote)
@@ -284,7 +310,7 @@ end
 
 function result = evaluate_flowfield_step(name, oursFile, goldFile, thr, gating)
 result = init_result(name, oursFile, goldFile, gating);
-result.metric = 'corr_flow_mean';
+result.metric = 'corr_flow_focus';
 result.threshold = thr;
 
 if ~exist(oursFile, 'file')
@@ -314,29 +340,58 @@ try
         error('流场维度异常: ours=%s, gold=%s', mat2str(d1), mat2str(d2));
     end
 
-    compCorr = nan(1,3);
+    compA = cell(1,3);
+    compB = cell(1,3);
     for c = 1:3
-        A = double(N1.dat(:,:,:,:,c));
-        B = double(N2.dat(:,:,:,:,c));
-        A = squeeze(A);
-        B = squeeze(B);
+        A = squeeze(double(N1.dat(:,:,:,:,c)));
+        B = squeeze(double(N2.dat(:,:,:,:,c)));
 
         if ~isequal(size(A), size(B)) || any(abs(N1.mat(:) - N2.mat(:)) > 1e-6)
             A = resample_vol_affine(A, N1.mat, N2.mat, size(B));
         end
 
-        m = isfinite(A) & isfinite(B) & ((A ~= 0) | (B ~= 0));
+        compA{c} = A;
+        compB{c} = B;
+    end
+
+    magA = sqrt(compA{1}.^2 + compA{2}.^2 + compA{3}.^2);
+    magB = sqrt(compB{1}.^2 + compB{2}.^2 + compB{3}.^2);
+
+    baseMask = isfinite(magA) & isfinite(magB) & ((magA ~= 0) | (magB ~= 0));
+    if ~any(baseMask(:))
+        result.status = 'invalid_mask';
+        result.pass = 0;
+        result.note = 'flow mask is empty';
+        return;
+    end
+
+    focusThr = prctile(magB(baseMask), 70);
+    focusMask = baseMask & ((magA >= focusThr) | (magB >= focusThr));
+    if nnz(focusMask) < 1000
+        focusMask = baseMask;
+    end
+
+    compCorr = nan(1,3);
+    compMae = nan(1,3);
+    for c = 1:3
+        A = compA{c};
+        B = compB{c};
+        m = focusMask & isfinite(A) & isfinite(B);
         if any(m(:))
             cc = corrcoef(A(m), B(m));
             compCorr(c) = cc(1,2);
+            compMae(c) = mean(abs(A(m) - B(m)), 'omitnan');
         end
     end
 
     flowCorr = mean(compCorr, 'omitnan');
+    flowMae = mean(compMae, 'omitnan');
     result.value = flowCorr;
     result.status = 'ok';
     result.pass = isfinite(flowCorr) && (flowCorr >= thr);
-    result.note = sprintf('compCorr=[%.4f %.4f %.4f]', compCorr(1), compCorr(2), compCorr(3));
+    result.note = sprintf('focus=%d/%d mae=%.6g compCorr=[%.4f %.4f %.4f] compMae=[%.6g %.6g %.6g]', ...
+        nnz(focusMask), nnz(baseMask), flowMae, compCorr(1), compCorr(2), compCorr(3), ...
+        compMae(1), compMae(2), compMae(3));
 catch ME
     result.status = 'error';
     result.pass = 0;

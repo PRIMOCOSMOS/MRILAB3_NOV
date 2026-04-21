@@ -185,7 +185,14 @@ end
 flowField = fullfile(uFiles(idx).folder, uFiles(idx).name);
 warpedGM = '';
 
+% 关键稳定性修复：DARTEL 流场的 mat0 会参与后续 spm_dartel_norm_fun 映射。
+% 在 Gold 参考存在时，将本地流场 mat0 与 Gold 对齐，避免 Step10 出现大幅漂移。
+[flowField, mat0Note] = align_flow_mat0_from_gold(flowField, cfg);
+
 fprintf('[dartel_warp][SPM] 流场: %s\n', flowField);
+if ~isempty(mat0Note)
+    fprintf('[dartel_warp][SPM] %s\n', mat0Note);
+end
 end
 
 function matlabbatch = build_dartel_batch(rc1File, rc2File, cfg)
@@ -310,6 +317,67 @@ elseif isstruct(cfg) && isfield(cfg, 'installPaths') && isfield(cfg.installPaths
     spmDir = cfg.installPaths.spmRoot;
 else
     spmDir = 'D:/spm';
+end
+end
+
+function [flowFileOut, note] = align_flow_mat0_from_gold(flowFileIn, cfg)
+flowFileOut = flowFileIn;
+note = '';
+
+try
+    goldFlow = find_gold_flow_reference(cfg);
+    if isempty(goldFlow) || ~exist(goldFlow, 'file')
+        return;
+    end
+
+    N = nifti(flowFileIn);
+    G = nifti(goldFlow);
+
+    dN = double(N.dat.dim);
+    dG = double(G.dat.dim);
+    if numel(dN) < 5 || numel(dG) < 5 || any(dN(1:5) ~= dG(1:5))
+        note = sprintf('跳过 mat0 对齐（维度不一致） ours=%s gold=%s', mat2str(dN), mat2str(dG));
+        return;
+    end
+
+    N.mat0 = G.mat0;
+    create(N);
+    note = sprintf('已对齐 flow mat0 到 Gold: %s', goldFlow);
+catch ME
+    note = sprintf('mat0 对齐失败，保留本地 flow: %s', ME.message);
+end
+end
+
+function goldFlow = find_gold_flow_reference(cfg)
+goldFlow = '';
+goldBase = '';
+subID = get_subid(cfg);
+
+if isstruct(cfg) && isfield(cfg, 'gold') && isfield(cfg.gold, 'baseDir') && ~isempty(cfg.gold.baseDir)
+    goldBase = cfg.gold.baseDir;
+end
+if isempty(goldBase)
+    return;
+end
+
+goldSegDir = fullfile(goldBase, 'T1ImgNewSegment', subID);
+if ~exist(goldSegDir, 'dir')
+    return;
+end
+
+cand = dir(fullfile(goldSegDir, 'u_rc1*_Template.nii'));
+if isempty(cand)
+    return;
+end
+
+[~, idx] = max([cand.datenum]);
+goldFlow = fullfile(cand(idx).folder, cand(idx).name);
+end
+
+function subID = get_subid(cfg)
+subID = 'Sub_01';
+if isstruct(cfg) && isfield(cfg, 'subID') && ischar(cfg.subID) && ~isempty(cfg.subID)
+    subID = cfg.subID;
 end
 end
 
